@@ -1,28 +1,37 @@
 require 'mqtt'
 require 'mqtt/client'
 
+require 'dxlclient/request_manager'
 require 'dxlclient/uuid_generator'
 
 module DxlClient
   class Client
     REPLY_TO_PREFIX = '/mcafee/client/'
     DEFAULT_WAIT = 60 * 60
-    DEFAULT_QOS = 0
+    MQTT_QOS = 0
+    MQTT_VERSION = '3.1.1'
 
-    private_constant :REPLY_TO_PREFIX, :DEFAULT_WAIT
+    private_constant :REPLY_TO_PREFIX, :DEFAULT_WAIT,
+                     :MQTT_QOS, :MQTT_VERSION
 
     def initialize(config)
       @client_id = DxlClient::UuidGenerator.generate_id_as_string
 
-      client = MQTT::Client.new(:client_id => @client_id)
-      client.host = config[:host]
-      client.port = config[:port]
+      client = MQTT::Client.new(
+          :host => config[:host],
+          :port => config[:port],
+          :client_id => @client_id,
+          :version => MQTT_VERSION,
+          :clean_session => true,
+          :ssl => true)
+
       client.cert_file = config[:client_cert_file]
       client.key_file = config[:client_private_key_file]
       client.ca_file = config[:ca_file]
-      client.ssl = true
+
       @client = client
 
+      @request_manager = DxlClient::RequestManager.new(self)
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
       if block_given?
@@ -56,7 +65,7 @@ module DxlClient
     end
 
     def sync_request(request, timeout=DEFAULT_WAIT)
-      send_request(request)
+      @request_manager.sync_request(request, timeout)
     end
 
     def destroy
@@ -67,7 +76,7 @@ module DxlClient
 
     private
     def publish_message(topic, payload)
-      @client.publish(topic, payload, false, DEFAULT_QOS)
+      @client.publish(topic, payload, false, MQTT_QOS)
     end
   end
 end

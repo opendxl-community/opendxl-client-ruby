@@ -12,7 +12,6 @@ module DxlClient
     MESSAGE_TYPE_ERROR = 3
 
     attr_accessor :destination_topic, :payload
-    # attr_reader :broker_ids, :client_ids
     attr_reader :message_id, :message_type, :version,
                 :source_client_id, :source_broker_id
 
@@ -23,6 +22,8 @@ module DxlClient
       @version = MESSAGE_VERSION
       @message_type = nil
       @message_id = DxlClient::UuidGenerator.generate_id_as_string
+
+      # TODO: Implement accessors for client and broker id fields
       @source_client_id = ''
       @source_broker_id = ''
       @broker_ids = []
@@ -34,14 +35,6 @@ module DxlClient
       # Version 2 fields
       @source_tenant_guid = ''
       @destination_tenant_guids = []
-
-      # @source_client_id = 'myclient'
-      # @source_broker_id = 'mybroker'
-      # @broker_ids = [ 'brokerid1', 'brokerid2']
-      # @client_ids = [ 'clientid1', 'clientid2']
-      # @other_fields = { 'field1': 'val1', 'field2': 'val2'}
-      # @source_tenant_guid = 'stguid1'
-      # @destination_tenant_guids = [ 'dtguid1', 'dtguid2']
     end
 
     def to_bytes
