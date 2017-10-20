@@ -2,7 +2,7 @@ require 'msgpack'
 
 require 'dxlclient/uuid_generator'
 
-module DxlClient
+module DXLClient
   class Message
     MESSAGE_VERSION = 2
 
@@ -21,7 +21,7 @@ module DxlClient
       # Version 0 fields
       @version = MESSAGE_VERSION
       @message_type = nil
-      @message_id = DxlClient::UuidGenerator.generate_id_as_string
+      @message_id = UuidGenerator.generate_id_as_string
 
       # TODO: Implement accessors for client and broker id fields
       @source_client_id = ''
@@ -53,7 +53,27 @@ module DxlClient
       io.string
     end
 
+    protected
+
+    def version=(version)
+      @version = version
+    end
+
+    def unpack_message(unpacker)
+      unpack_message_v0(unpacker)
+    end
+
+    def unpack_message_v0(unpacker)
+      @message_id = unpacker.unpack()
+      @source_client_id = unpacker.unpack()
+      @source_broker_id = unpacker.unpack()
+      @broker_ids = unpacker.unpack()
+      @client_ids = unpacker.unpack()
+      @payload = unpacker.unpack()
+    end
+
     private
+
     def pack_message(packer)
       packer.write(@message_id)
       packer.write(@source_client_id)

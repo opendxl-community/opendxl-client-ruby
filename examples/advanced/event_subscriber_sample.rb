@@ -6,7 +6,7 @@ config = {:host => '192.168.99.100',
           :client_cert_file => '/home/jbarlow/documents/dxlcerts/client.crt',
           :client_private_key_file => '/home/jbarlow/documents/dxlcerts/client.key'}
 
-DxlClient::Client.new(config) do |client|
+DXLClient::Client.new(config) do |client|
   puts('Connecting...')
   client.connect
   puts('Subscribe and listen...')

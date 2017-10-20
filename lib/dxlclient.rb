@@ -1,3 +1,6 @@
 require 'dxlclient/client'
 require 'dxlclient/request'
+require 'dxlclient/response'
+require 'dxlclient/error_response'
 require 'dxlclient/event'
+require 'dxlclient/wait_timeout_error'

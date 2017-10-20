@@ -8,15 +8,17 @@ config = {:host => '192.168.99.100',
 
 SERVICE_TOPIC = '/isecg/sample/basicservice'
 
-DxlClient::Client.new(config) do |client|
+DXLClient::Client.new(config) do |client|
   puts('Connecting...')
   client.connect
 
-  req = DxlClient::Request.new(SERVICE_TOPIC)
+  req = DXLClient::Request.new(SERVICE_TOPIC)
   req.payload = 'ping'
   puts('Subscribe and listen...')
-  res = client.sync_request(req)
-  if res.message_type != Message.MESSAGE_TYPE_ERROR
+  res = client.sync_request(req, 5)
+  if res.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+    raise Exception.new("Error: #{res.error_message} (#{res.error_code})")
+  else
     puts("Client received response payload: #{res.payload}")
   end
 end

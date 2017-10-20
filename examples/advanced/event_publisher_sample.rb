@@ -8,7 +8,7 @@ config = {:host => '192.168.99.100',
 
 EVENT_TOPIC = '/isecg/sample/event'
 
-DxlClient::Client.new(config) do |client|
+DXLClient::Client.new(config) do |client|
   puts('Connecting...')
   client.connect
 
@@ -21,7 +21,7 @@ DxlClient::Client.new(config) do |client|
     case input
       when '1'
         puts("Event Publisher - Creating Event for Topic #{EVENT_TOPIC}")
-        event = DxlClient::Event.new(EVENT_TOPIC)
+        event = DXLClient::Event.new(EVENT_TOPIC)
         event.payload = 'Sample Event Payload'
         puts("Event Publisher - Publishing Event to #{EVENT_TOPIC}")
         client.send_event(event)

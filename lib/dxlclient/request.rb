@@ -1,6 +1,6 @@
 require 'dxlclient/message'
 
-module DxlClient
+module DXLClient
   class Request < Message
     attr_accessor :reply_to_topic, :service_id
 
@@ -12,6 +12,7 @@ module DxlClient
     end
 
     private
+
     def pack_message(packer)
       super(packer)
       packer.write(@reply_to_topic)
