@@ -13,10 +13,16 @@ module DXLClient
 
     private
 
-    def pack_message(packer)
+    def pack_message_v0(packer)
       super(packer)
       packer.write(@reply_to_topic)
       packer.write(@service_id)
+    end
+
+    def unpack_message_v0(unpacker)
+      super(unpacker)
+      @reply_to_topic = unpacker.unpack()
+      @service_id = unpacker.unpack()
     end
   end
 end

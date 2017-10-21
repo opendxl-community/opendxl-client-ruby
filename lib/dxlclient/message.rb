@@ -4,14 +4,17 @@ require 'dxlclient/uuid_generator'
 
 module DXLClient
   class Message
-    MESSAGE_VERSION = 2
+    DEFAULT_MESSAGE_VERSION = 2
 
     MESSAGE_TYPE_REQUEST = 0
     MESSAGE_TYPE_RESPONSE = 1
     MESSAGE_TYPE_EVENT = 2
     MESSAGE_TYPE_ERROR = 3
 
-    attr_accessor :destination_topic, :payload
+    attr_accessor :broker_ids, :client_ids, :destination_topic,
+                  :destination_tenant_guids, :other_fields, :payload,
+                  :source_tenant_guid
+
     attr_reader :message_id, :message_type, :version,
                 :source_client_id, :source_broker_id
 
@@ -19,11 +22,10 @@ module DXLClient
       @destination_topic = destination_topic
 
       # Version 0 fields
-      @version = MESSAGE_VERSION
+      @version = DEFAULT_MESSAGE_VERSION
       @message_type = nil
-      @message_id = UuidGenerator.generate_id_as_string
+      @message_id = UUIDGenerator.generate_id_as_string
 
-      # TODO: Implement accessors for client and broker id fields
       @source_client_id = ''
       @source_broker_id = ''
       @broker_ids = []
@@ -37,22 +39,6 @@ module DXLClient
       @destination_tenant_guids = []
     end
 
-    def to_bytes
-      if not @message_type
-        raise NotImplementedError('Unknown message type')
-      end
-
-      io = StringIO.new
-      packer = MessagePack::Packer.new(io)
-      packer.write(@version)
-      packer.write(@message_type)
-      pack_message(packer)
-      pack_message_v1(packer)
-      pack_message_v2(packer)
-      packer.flush
-      io.string
-    end
-
     protected
 
     def version=(version)
@@ -61,20 +47,23 @@ module DXLClient
 
     def unpack_message(unpacker)
       unpack_message_v0(unpacker)
+      if @version > 0
+        unpack_message_v1(unpacker)
+      end
+      if @version > 1
+        unpack_message_v2(unpacker)
+      end
     end
 
-    def unpack_message_v0(unpacker)
-      @message_id = unpacker.unpack()
-      @source_client_id = unpacker.unpack()
-      @source_broker_id = unpacker.unpack()
-      @broker_ids = unpacker.unpack()
-      @client_ids = unpacker.unpack()
-      @payload = unpacker.unpack()
+    def pack_message(packer)
+      pack_message_v0(packer)
+      pack_message_v1(packer)
+      pack_message_v2(packer)
     end
 
     private
 
-    def pack_message(packer)
+    def pack_message_v0(packer)
       packer.write(@message_id)
       packer.write(@source_client_id)
       packer.write(@source_broker_id)
@@ -90,6 +79,24 @@ module DXLClient
     def pack_message_v2(packer)
       packer.write(@source_tenant_guid)
       packer.write(@destination_tenant_guids)
+    end
+
+    def unpack_message_v0(unpacker)
+      @message_id = unpacker.unpack()
+      @source_client_id = unpacker.unpack()
+      @source_broker_id = unpacker.unpack()
+      @broker_ids = unpacker.unpack()
+      @client_ids = unpacker.unpack()
+      @payload = unpacker.unpack()
+    end
+
+    def unpack_message_v1(unpacker)
+      @other_fields = Hash[*unpacker.unpack()]
+    end
+
+    def unpack_message_v2(unpacker)
+      @source_tenant_guid = unpacker.unpack()
+      @destination_tenant_guids = unpacker.unpack()
     end
   end
 end

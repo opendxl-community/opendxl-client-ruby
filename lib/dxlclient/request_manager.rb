@@ -1,4 +1,5 @@
 require 'set'
+require 'timeout'
 
 module DXLClient
   class RequestManager
@@ -76,7 +77,7 @@ module DXLClient
           end
           wait_time_remaining = wait_start - now + timeout
           if wait_time_remaining <= 0
-            raise DXLClient::WaitTimeoutError.
+            raise Timeout::Error.
                 new("Timeout waiting for response to message: #{message_id}")
           end
           @sync_wait_message_condition.wait(@sync_wait_message_lock,

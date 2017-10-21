@@ -1,4 +1,5 @@
 require 'dxlclient/message'
+require 'dxlclient/response'
 
 module DXLClient
   class ErrorResponse < Response

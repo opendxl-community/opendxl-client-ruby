@@ -1,23 +1,25 @@
 require 'mqtt'
 require 'mqtt/client'
 
-require 'dxlclient/message_unpacker'
+require 'dxlclient/dxl_error'
+require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
 require 'dxlclient/request_manager'
+require 'dxlclient/service_manager'
 require 'dxlclient/uuid_generator'
 
 module DXLClient
   class Client
     REPLY_TO_PREFIX = '/mcafee/client/'
-    DEFAULT_WAIT = 60 * 60
+    DEFAULT_REQUEST_TIMEOUT = 60 * 60
     MQTT_QOS = 0
     MQTT_VERSION = '3.1.1'
 
-    private_constant :REPLY_TO_PREFIX, :DEFAULT_WAIT,
+    private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT,
                      :MQTT_QOS, :MQTT_VERSION
 
     def initialize(config)
-      @client_id = UuidGenerator.generate_id_as_string
+      @client_id = UUIDGenerator.generate_id_as_string
 
       client = MQTTClient.new(
           :host => config[:host],
@@ -33,7 +35,9 @@ module DXLClient
       client.on_message = method(:on_message)
       @client = client
 
+      @connected = false
       @request_manager = RequestManager.new(self)
+      @service_manager = ServiceManager.new(self)
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
       if block_given?
@@ -47,6 +51,7 @@ module DXLClient
 
     def connect
       @client.connect
+      @connected = true
       subscribe(@reply_to_topic)
     end
 
@@ -58,20 +63,34 @@ module DXLClient
       end
     end
 
+    def register_service_sync(service_reg_info, timeout)
+      if !@connected
+        raise DXLClient::DXLError('Client is not currently connected')
+      end
+      @service_manager.add_service_sync(service_reg_info, timeout)
+    end
+
     def send_event(event)
-      publish_message(event.destination_topic, event.to_bytes)
+      publish_message(event.destination_topic,
+                      MessageEncoder.new.to_bytes(event))
     end
 
     def send_request(request)
       request.reply_to_topic = @reply_to_topic
-      publish_message(request.destination_topic, request.to_bytes)
+      publish_message(request.destination_topic,
+                      MessageEncoder.new.to_bytes(request))
+    end
+
+    def send_response(response)
+      publish_message(response.destination_topic,
+                      MessageEncoder.new.to_bytes(response))
     end
 
     def subscribe(topic)
       @client.subscribe(topic)
     end
 
-    def sync_request(request, timeout=DEFAULT_WAIT)
+    def sync_request(request, timeout=DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
     end
 
@@ -84,9 +103,17 @@ module DXLClient
     private
 
     def on_message(raw_message)
-      message = MessageUnpacker.new.from_bytes(raw_message.payload)
+      message = MessageEncoder.new.from_bytes(raw_message.payload)
       message.destination_topic = raw_message.topic
-      @request_manager.on_response(message)
+
+      case message
+        when DXLClient::Request
+          @service_manager.on_request(message)
+        when DXLClient::Response
+          @request_manager.on_response(message)
+        else
+          raise NotImplementedError.new("No on_message implementation for #{message}")
+      end
     end
 
     def publish_message(topic, payload)

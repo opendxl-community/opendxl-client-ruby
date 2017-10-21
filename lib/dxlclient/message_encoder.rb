@@ -4,7 +4,7 @@ require 'dxlclient/message'
 require 'dxlclient/uuid_generator'
 
 module DXLClient
-  class MessageUnpacker < Message
+  class MessageEncoder < Message
     def initialize
     end
 
@@ -15,6 +15,8 @@ module DXLClient
       message_type = unpacker.unpack()
 
       case message_type
+        when DXLClient::Message::MESSAGE_TYPE_REQUEST
+          message = DXLClient::Request.new('')
         when DXLClient::Message::MESSAGE_TYPE_RESPONSE
           message = DXLClient::Response.new
         when DXLClient::Message::MESSAGE_TYPE_ERROR
@@ -24,14 +26,24 @@ module DXLClient
       end
 
       message.version = version
-      if message.version > 0
-        message.unpack_message(unpacker)
-      end
+      message.unpack_message(unpacker)
       message
+    end
+
+    def to_bytes(message)
+      if not message.message_type
+        raise NotImplementedError('Unknown message type')
+      end
+
+      io = StringIO.new
+      packer = MessagePack::Packer.new(io)
+      packer.write(message.version)
+      packer.write(message.message_type)
+      message.pack_message(packer)
+      packer.flush
+      io.string
     end
   end
 
-  private_constant :MessageUnpacker
+  private_constant :MessageEncoder
 end
-
-
