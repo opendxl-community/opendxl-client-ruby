@@ -8,8 +8,9 @@ config = {:host => '192.168.99.100',
 
 EVENT_TOPIC = '/isecg/sample/event'
 
+puts('Event Publisher - Creating DXL Client')
 DXLClient::Client.new(config) do |client|
-  puts('Connecting...')
+  puts('Event Publisher - Connecting to Broker')
   client.connect
 
   while true

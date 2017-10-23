@@ -2,6 +2,7 @@ require 'mqtt'
 require 'mqtt/client'
 
 require 'dxlclient/dxl_error'
+require 'dxlclient/event_manager'
 require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
 require 'dxlclient/request_manager'
@@ -21,7 +22,7 @@ module DXLClient
     def initialize(config)
       @client_id = UUIDGenerator.generate_id_as_string
 
-      client = MQTTClient.new(
+      @mqtt_client = MQTTClient.new(
           :host => config[:host],
           :port => config[:port],
           :client_id => @client_id,
@@ -29,13 +30,13 @@ module DXLClient
           :clean_session => true,
           :ssl => true)
 
-      client.cert_file = config[:client_cert_file]
-      client.key_file = config[:client_private_key_file]
-      client.ca_file = config[:ca_file]
-      client.on_message = method(:on_message)
-      @client = client
+      @mqtt_client.cert_file = config[:client_cert_file]
+      @mqtt_client.key_file = config[:client_private_key_file]
+      @mqtt_client.ca_file = config[:ca_file]
+      @mqtt_client.on_message = method(:on_message)
 
       @connected = false
+      @event_manager = EventManager.new
       @request_manager = RequestManager.new(self)
       @service_manager = ServiceManager.new(self)
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
@@ -50,24 +51,24 @@ module DXLClient
     end
 
     def connect
-      @client.connect
+      @mqtt_client.connect
       @connected = true
       subscribe(@reply_to_topic)
     end
 
-    def add_event_callback(topic)
-      printf("Subscribing to %s\n", topic)
-      subscribe(topic)
-      @client.get do |callback_topic, message|
-        printf("Got topic=%s, message=%s\n", callback_topic, message)
+    def add_event_callback(topic, callback, subscribe_to_topic=true)
+      @event_manager.add_event_callback(topic, callback)
+      if subscribe_to_topic and !topic.nil?
+        subscribe(topic)
       end
     end
 
     def register_service_sync(service_reg_info, timeout)
-      if !@connected
-        raise DXLClient::DXLError('Client is not currently connected')
-      end
       @service_manager.add_service_sync(service_reg_info, timeout)
+    end
+
+    def unregister_service_sync(service_reg_info, timeout)
+      @service_manager.remove_service_sync(service_reg_info, timeout)
     end
 
     def send_event(event)
@@ -87,17 +88,21 @@ module DXLClient
     end
 
     def subscribe(topic)
-      @client.subscribe(topic)
+      @mqtt_client.subscribe(topic)
     end
 
     def sync_request(request, timeout=DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
     end
 
+    def unsubscribe(topic)
+      @mqtt_client.unsubscribe(topic)
+    end
+
     def destroy
-      if @client
-        @client.disconnect
-      end
+      @service_manager.destroy
+      unsubscribe(@reply_to_topic)
+      @mqtt_client.disconnect
     end
 
     private
@@ -107,6 +112,8 @@ module DXLClient
       message.destination_topic = raw_message.topic
 
       case message
+        when DXLClient::Event
+          @event_manager.on_event(message)
         when DXLClient::Request
           @service_manager.on_request(message)
         when DXLClient::Response
@@ -117,7 +124,7 @@ module DXLClient
     end
 
     def publish_message(topic, payload)
-      @client.publish(topic, payload, false, MQTT_QOS)
+      @mqtt_client.publish(topic, payload, false, MQTT_QOS)
     end
   end
 end

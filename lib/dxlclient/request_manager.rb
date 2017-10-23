@@ -1,4 +1,5 @@
 require 'set'
+require 'thread'
 require 'timeout'
 
 module DXLClient

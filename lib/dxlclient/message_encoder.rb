@@ -1,6 +1,10 @@
 require 'msgpack'
 
+require 'dxlclient/dxl_error'
+require 'dxlclient/error_response'
+require 'dxlclient/event'
 require 'dxlclient/message'
+require 'dxlclient/response'
 require 'dxlclient/uuid_generator'
 
 module DXLClient
@@ -15,6 +19,8 @@ module DXLClient
       message_type = unpacker.unpack()
 
       case message_type
+        when DXLClient::Message::MESSAGE_TYPE_EVENT
+          message = DXLClient::Event.new('')
         when DXLClient::Message::MESSAGE_TYPE_REQUEST
           message = DXLClient::Request.new('')
         when DXLClient::Message::MESSAGE_TYPE_RESPONSE
