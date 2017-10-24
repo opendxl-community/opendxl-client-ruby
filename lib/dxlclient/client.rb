@@ -14,25 +14,16 @@ module DXLClient
     REPLY_TO_PREFIX = '/mcafee/client/'
     DEFAULT_REQUEST_TIMEOUT = 60 * 60
     MQTT_QOS = 0
-    MQTT_VERSION = '3.1.1'
 
     private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT,
-                     :MQTT_QOS, :MQTT_VERSION
+                     :MQTT_QOS
 
+    # @param config [DXLClient::Config]
     def initialize(config)
+      @logger = DXLClient::Logger.logger(self.class)
       @client_id = UUIDGenerator.generate_id_as_string
 
-      @mqtt_client = MQTTClient.new(
-          :host => config[:host],
-          :port => config[:port],
-          :client_id => @client_id,
-          :version => MQTT_VERSION,
-          :clean_session => true,
-          :ssl => true)
-
-      @mqtt_client.cert_file = config[:client_cert_file]
-      @mqtt_client.key_file = config[:client_private_key_file]
-      @mqtt_client.ca_file = config[:ca_file]
+      @mqtt_client = MQTTClient.new(config)
       @mqtt_client.on_message = method(:on_message)
 
       @connected = false
@@ -100,9 +91,11 @@ module DXLClient
     end
 
     def destroy
-      @service_manager.destroy
-      unsubscribe(@reply_to_topic)
-      @mqtt_client.disconnect
+      if @connected
+        @service_manager.destroy
+        unsubscribe(@reply_to_topic)
+        @mqtt_client.disconnect
+      end
     end
 
     private

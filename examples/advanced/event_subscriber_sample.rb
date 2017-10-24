@@ -1,38 +1,48 @@
 require 'dxlclient'
 
-config = {:host => '192.168.99.100',
-          :port => 8883,
-          :ca_file => '/home/jbarlow/documents/dxlcerts/ca-broker.crt',
-          :client_cert_file => '/home/jbarlow/documents/dxlcerts/client.crt',
-          :client_private_key_file => '/home/jbarlow/documents/dxlcerts/client.key'}
+$LOAD_PATH.unshift(File.expand_path('..', File.dirname(__FILE__)))
+require 'common'
 
 EVENT_TOPIC = '/isecg/sample/event'
 
-puts('Event Subscriber - Creating DXL Client')
-DXLClient::Client.new(config) do |client|
-  puts('Event Subscriber - Connecting to Broker')
-  client.connect
+logger = DXLClient::Logger.logger(File.basename(__FILE__, '.rb'))
 
-  class MyEventCallback < DXLClient::EventCallback
-    def on_event(event)
-      puts('Event Subscriber - Event received')
-      puts("  Topic: #{event.destination_topic}")
-      puts("  Payload: #{event.payload}")
+begin
+  logger.info("Event Subscriber - Load DXL config from: #{CONFIG_FILE}")
+  config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
+
+  logger.info('Event Subscriber - Creating DXL Client')
+  DXLClient::Client.new(config) do |client|
+    logger.info('Event Subscriber - Connecting to Broker')
+    client.connect
+
+    class MySubscriberCallback < DXLClient::EventCallback
+      def initialize(logger)
+        @logger = logger
+      end
+
+      def on_event(event)
+        @logger.info("Event Subscriber - %s\n   Topic: %s\n   Payload: %s" %
+          ['Event received', event.destination_topic, event.payload])
+      end
+    end
+
+    puts("Adding Event callback function to Topic: #{EVENT_TOPIC}")
+    client.add_event_callback(EVENT_TOPIC, MySubscriberCallback.new(logger))
+
+    while true
+      puts('   Enter 9 to quit')
+      print('   Enter value: ')
+      input = gets.chomp
+
+      loop
+        if input == '9'
+          break
+        puts("Event Subscriber - Invalid input: #{input}")
+      end
     end
   end
-
-  puts("Adding Event callback function to Topic: #{EVENT_TOPIC}")
-  client.add_event_callback(EVENT_TOPIC, MyEventCallback.new)
-
-  while true
-    puts('   Enter 9 to quit')
-    print('   Enter value: ')
-    input = gets.chomp
-
-    loop
-      if input == '9'
-        break
-      puts("Event Publisher - Invalid input: #{input}")
-    end
-  end
+rescue => e
+  logger.exception(e,"Event Subscriber - Exception")
+  exit(1)
 end

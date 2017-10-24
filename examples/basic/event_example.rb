@@ -1,11 +1,10 @@
-require 'dxlclient'
 require 'thread'
+require 'dxlclient'
 
-config = {:host => '192.168.99.100',
-          :port => 8883,
-          :ca_file => '/home/jbarlow/documents/dxlcerts/ca-broker.crt',
-          :client_cert_file => '/home/jbarlow/documents/dxlcerts/client.crt',
-          :client_private_key_file => '/home/jbarlow/documents/dxlcerts/client.key'}
+DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
+
+$LOAD_PATH.unshift(File.expand_path('..', File.dirname(__FILE__)))
+require 'common'
 
 EVENT_TOPIC = '/isecg/sample/basicevent'
 
@@ -15,9 +14,9 @@ event_count_mutex = Mutex.new
 event_count_condition = ConditionVariable.new
 event_count = [0]
 
-puts('Event Subscriber - Creating DXL Client')
+config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
+
 DXLClient::Client.new(config) do |client|
-  puts('Event Subscriber - Connecting to Broker')
   client.connect
 
   class MyEventCallback < DXLClient::EventCallback
@@ -36,7 +35,6 @@ DXLClient::Client.new(config) do |client|
     end
   end
 
-  puts("Adding Event callback function to Topic: #{EVENT_TOPIC}")
   client.add_event_callback(EVENT_TOPIC,
                             MyEventCallback.new(event_count,
                                                 event_count_condition,

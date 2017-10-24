@@ -1,12 +1,11 @@
-require 'securerandom'
 require 'dxlclient'
 
-puts("pwd: #{Dir.pwd}")
+DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 $LOAD_PATH.unshift(File.expand_path('..', File.dirname(__FILE__)))
 require 'common'
 
-SERVICE_TOPIC = "/isecg/sample/mybasicservice/#{SecureRandom.uuid}"
+SERVICE_TOPIC = "/isecg/sample/mybasicservice"
 
 config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
 

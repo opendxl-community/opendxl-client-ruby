@@ -4,7 +4,8 @@ require 'dxlclient/broker'
 
 module DXLClient
   class Config
-    attr_accessor :broker_ca_bundle, :cert_file, :private_key, :brokers
+    attr_accessor :brokers, :broker_ca_bundle, :client_id,
+                  :cert_file, :private_key
 
     def initialize (broker_ca_bundle: nil,
                     cert_file: nil,
@@ -49,14 +50,14 @@ module DXLClient
                       "Missing elements in config broker line: #{broker_info}")
           end
 
-          port = self.class.to_port_number(broker_info[0])
+          port = to_port_number(broker_info[0])
           if port
             id = nil
             port = port
             hosts = broker_info[1..-1]
           else
             id = broker_info[0]
-            port = self.class.to_port_number(broker_info[1])
+            port = to_port_number(broker_info[1])
             unless port
               raise ArgumentError(
                         "Port number not found in config broker line: #{broker_info}")
@@ -74,7 +75,7 @@ module DXLClient
       end
     end
 
-    def self.to_port_number(text)
+    def to_port_number(text)
       begin
         number = Integer(text)
         if number > 0 && number < 65536
