@@ -6,7 +6,8 @@ module DXLClient
 
     def add_event_callback(topic, callback)
       callbacks = @callbacks_by_topic[topic]
-      if !callbacks
+
+      unless callbacks
         callbacks = Set.new
         @callbacks_by_topic[topic] = callbacks
       end

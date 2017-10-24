@@ -1,14 +1,14 @@
 require 'securerandom'
-
 require 'dxlclient'
 
-config = {:host => '192.168.99.100',
-          :port => 8883,
-          :ca_file => '/home/jbarlow/documents/dxlcerts/ca-broker.crt',
-          :client_cert_file => '/home/jbarlow/documents/dxlcerts/client.crt',
-          :client_private_key_file => '/home/jbarlow/documents/dxlcerts/client.key'}
+puts("pwd: #{Dir.pwd}")
+
+$LOAD_PATH.unshift(File.expand_path('..', File.dirname(__FILE__)))
+require 'common'
 
 SERVICE_TOPIC = "/isecg/sample/mybasicservice/#{SecureRandom.uuid}"
+
+config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
 
 DXLClient::Client.new(config) do |client|
   client.connect
