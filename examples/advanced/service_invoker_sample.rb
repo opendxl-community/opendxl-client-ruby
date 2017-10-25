@@ -16,28 +16,6 @@ begin
     logger.info('Service Invoker - Connecting to Broker')
     client.connect
 
-    class MyInvokerCallback < DXLClient::ResponseCallback
-      def initialize(logger)
-        @logger = logger
-      end
-
-      def on_response(response)
-        if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-          @logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s" %
-                           ['Service Invoker - Asynchronous Error Response received',
-                            response.destination_topic,
-                            response.request_message_id,
-                            response.error_message])
-        else
-          @logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s" %
-                           ['Service Invoker - Asynchronous Response received',
-                            response.destination_topic,
-                            response.request_message_id,
-                            response.payload])
-        end
-      end
-    end
-
     while true
       puts('   Enter 1 to send a Synchronous Event')
       puts('   Enter 2 to send an Asynchronous Event')
@@ -77,7 +55,21 @@ begin
 
           logger.info(
               "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}")
-          client.async_request(request, MyInvokerCallback.new(logger))
+          client.async_request(request) do |response|
+            if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+              logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s" %
+                              ['Service Invoker - Asynchronous Error Response received',
+                               response.destination_topic,
+                               response.request_message_id,
+                               response.error_message])
+            else
+              logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s" %
+                              ['Service Invoker - Asynchronous Response received',
+                               response.destination_topic,
+                               response.request_message_id,
+                               response.payload])
+            end
+          end
         when '9'
           break
         else

@@ -28,7 +28,11 @@ module DXLClient
       end
 
       if response_callback
-        response_callback.on_response(response)
+        if response_callback.is_a?(Proc) || response_callback.is_a?(Method)
+          response_callback.call(response)
+        else
+          response_callback.on_response(response)
+       end
       end
     end
 

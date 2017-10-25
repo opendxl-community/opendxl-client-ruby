@@ -32,12 +32,11 @@ module DXLClient
       @service_manager = ServiceManager.new(self)
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
-      if block_given?
-        begin
-          yield(self)
-        ensure
-          destroy
-        end
+      return unless block_given?
+      begin
+        yield(self)
+      ensure
+        destroy
       end
     end
 
@@ -49,7 +48,7 @@ module DXLClient
 
     def add_event_callback(topic, callback, subscribe_to_topic=true)
       @event_manager.add_event_callback(topic, callback)
-      if subscribe_to_topic and !topic.nil?
+      if subscribe_to_topic && !topic.nil?
         subscribe(topic)
       end
     end
@@ -58,8 +57,16 @@ module DXLClient
       @service_manager.add_service_sync(service_reg_info, timeout)
     end
 
+    def register_service_async(service_reg_info)
+      @service_manager.add_service_async(service_reg_info)
+    end
+
     def unregister_service_sync(service_reg_info, timeout)
       @service_manager.remove_service_sync(service_reg_info, timeout)
+    end
+
+    def unregister_service_async(service_reg_info)
+      @service_manager.remove_service_async(service_reg_info)
     end
 
     def send_event(event)
@@ -82,8 +89,13 @@ module DXLClient
       @mqtt_client.subscribe(topic)
     end
 
-    def async_request(request, response_callback=nil)
-      @request_manager.async_request(request, response_callback)
+    def async_request(request, response_callback=nil, &block)
+      if response_callback && block_given?
+        raise ArgumentError,
+              'Only a callback or block (but not both) may be specified'
+      end
+      callback = block_given? ? block : response_callback
+      @request_manager.async_request(request, callback)
     end
 
     def sync_request(request, timeout=DEFAULT_REQUEST_TIMEOUT)
@@ -95,11 +107,10 @@ module DXLClient
     end
 
     def destroy
-      if @connected
-        @service_manager.destroy
-        unsubscribe(@reply_to_topic)
-        @mqtt_client.disconnect
-      end
+      return unless @connected
+      @service_manager.destroy
+      unsubscribe(@reply_to_topic)
+      @mqtt_client.disconnect
     end
 
     private

@@ -29,15 +29,14 @@ begin
                           request.message_id,
                           request.payload])
 
-        @logger.info("%s Creating Response for Request ID %s on %s" %
+        @logger.info('%s Creating Response for Request ID %s on %s' %
                          ['Service Provider -',
                           request.message_id,
                           request.destination_topic])
         response = DXLClient::Response.new(request)
         response.payload = 'Sample Response Payload'
 
-
-        @logger.info("%s Sending Response for Request ID %s on %s" %
+        @logger.info('%s Sending Response for Request ID %s on %s' %
                          ['Service Provider -',
                           request.message_id,
                           request.destination_topic])
@@ -65,6 +64,6 @@ begin
     end
   end
 rescue => e
-  logger.exception(e,"Service Provider - Exception")
+  logger.exception(e, 'Service Provider - Exception')
   exit(1)
 end
