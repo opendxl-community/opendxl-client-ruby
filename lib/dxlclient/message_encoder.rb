@@ -28,7 +28,8 @@ module DXLClient
         when DXLClient::Message::MESSAGE_TYPE_ERROR
           message = DXLClient::ErrorResponse.new
         else
-          raise DXLClient::DXLError.new("Unknown message type: #{message_type}")
+          raise DXLClient::DXLError,
+                "Unknown message type: #{message_type}"
       end
 
       message.version = version
@@ -38,7 +39,7 @@ module DXLClient
 
     def to_bytes(message)
       if not message.message_type
-        raise NotImplementedError('Unknown message type')
+        raise NotImplementedError, 'Unknown message type'
       end
 
       io = StringIO.new

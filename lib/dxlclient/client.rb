@@ -82,6 +82,10 @@ module DXLClient
       @mqtt_client.subscribe(topic)
     end
 
+    def async_request(request, response_callback=nil)
+      @request_manager.async_request(request, response_callback)
+    end
+
     def sync_request(request, timeout=DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
     end
@@ -112,7 +116,8 @@ module DXLClient
         when DXLClient::Response
           @request_manager.on_response(message)
         else
-          raise NotImplementedError.new("No on_message implementation for #{message}")
+          raise NotImplementedError,
+                "No on_message implementation for #{message}"
       end
     end
 

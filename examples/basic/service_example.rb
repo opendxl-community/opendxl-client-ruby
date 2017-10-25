@@ -25,16 +25,16 @@ DXLClient::Client.new(config) do |client|
     end
   end
 
-  info = DXLClient::ServiceRegistrationInfo.new(client, "myService")
+  info = DXLClient::ServiceRegistrationInfo.new(client, 'myService')
   info.add_topic(SERVICE_TOPIC, MyRequestCallback.new(client))
   client.register_service_sync(info, 10)
 
-  req = DXLClient::Request.new(SERVICE_TOPIC)
-  req.payload = 'ping'
-  res = client.sync_request(req, 5)
-  if res.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-    raise Exception.new("Error: #{res.error_message} (#{res.error_code})")
+  request = DXLClient::Request.new(SERVICE_TOPIC)
+  request.payload = 'ping'
+  response = client.sync_request(request)
+  if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+    raise Exception, "Error: #{response.error_message} (#{response.error_code})"
   else
-    puts("Client received response payload: #{res.payload}")
+    puts("Client received response payload: #{response.payload}")
   end
 end

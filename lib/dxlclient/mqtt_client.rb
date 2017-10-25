@@ -13,10 +13,11 @@ module DXLClient
       @logger = DXLClient::Logger.logger(self.class)
 
       if config.brokers.nil? || config.brokers.length == 0
-        raise ArgumentError, "No brokers in configuration so can't connect"
+        raise ArgumentError, 'No brokers in configuration so cannot connect'
       end
 
-      super(:port => port,
+      super(:client_id => config.client_id,
+            :port => port,
             :version => MQTT_VERSION,
             :clean_session => true,
             :ssl => true)
@@ -48,7 +49,7 @@ module DXLClient
         if connect_error
           raise connect_error
         else
-          raise SocketError, "Unable to connect to any brokers"
+          raise SocketError, 'Unable to connect to any brokers'
         end
       end
     end

@@ -46,8 +46,8 @@ module DXLClient
         @config_model['Brokers'].lines.collect do |broker_option|
           broker_info = broker_option.value.split(';')
           if broker_info.length < 2
-            raise ArgumentError(
-                      "Missing elements in config broker line: #{broker_info}")
+            raise ArgumentError,
+                      "Missing elements in config broker line: #{broker_info}"
           end
 
           port = to_port_number(broker_info[0])
@@ -59,15 +59,15 @@ module DXLClient
             id = broker_info[0]
             port = to_port_number(broker_info[1])
             unless port
-              raise ArgumentError(
-                        "Port number not found in config broker line: #{broker_info}")
+              raise ArgumentError,
+                        "Port number not found in config broker line: #{broker_info}"
             end
             hosts = broker_info[2..-1]
           end
 
           unless hosts
-            raise ArgumentError(
-                      "No hosts found in config broker line: #{broker_info}")
+            raise ArgumentError,
+                      "No hosts found in config broker line: #{broker_info}"
           end
 
           DXLClient::Broker.new(hosts, id, port)

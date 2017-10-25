@@ -47,8 +47,8 @@ module DXLClient
       request.payload = JSON.dump(serviceGuid: service_reg_info.service_id)
       response = @client.sync_request(request, timeout)
       if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-        raise DXLClient::DXLError.new(
-            "Error unregistering service: #{res.error_message} (#{res.error_code})")
+        raise DXLClient::DXLError,
+            "Error unregistering service: #{res.error_message} (#{res.error_code})"
       end
 
       @services.delete(service_reg_info.service_id)

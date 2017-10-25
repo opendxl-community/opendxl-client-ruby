@@ -27,7 +27,7 @@ begin
       end
     end
 
-    puts("Adding Event callback function to Topic: #{EVENT_TOPIC}")
+    logger.info("Adding Event callback function to Topic: #{EVENT_TOPIC}")
     client.add_event_callback(EVENT_TOPIC, MySubscriberCallback.new(logger))
 
     while true
@@ -38,7 +38,7 @@ begin
       loop
         if input == '9'
           break
-        puts("Event Subscriber - Invalid input: #{input}")
+        logger.info("Event Subscriber - Invalid input: #{input}")
       end
     end
   end
