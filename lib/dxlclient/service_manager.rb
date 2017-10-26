@@ -10,52 +10,50 @@ module DXLClient
     SERVICE_REGISTRATION_REQUEST_TIMEOUT = 10 # seconds
     SERVICE_UNREGISTRATION_REQUEST_TIMEOUT = 60 # seconds
 
+    # @param client [DXLClient::Client]
     def initialize(client)
       @client = client
       @services = {}
     end
 
     def add_service_async(service_reg_info)
-      request = add_service_common(service_reg_info)
-      @client.async_request(request)
+      request = register_service_request(service_reg_info)
+      @client.async_request(request) do |response|
+        add_service_callbacks(service_reg_info)
+      end
+      @services[service_reg_info.service_id] = service_reg_info
     end
 
     def add_service_sync(service_reg_info,
                          timeout=SERVICE_REGISTRATION_REQUEST_TIMEOUT)
-      request = add_service_common(service_reg_info)
+      request = register_service_request(service_reg_info)
       response = @client.sync_request(request, timeout)
       if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
         raise DXLClient::DXLError,
               "Error registering service: #{response.error_message} (#{response.error_code})"
       end
-
+      add_service_callbacks(service_reg_info)
       @services[service_reg_info.service_id] = service_reg_info
     end
 
     def remove_service_async(service_reg_info)
-      request = remove_service_common(service_reg_info)
+      request = unregister_service_request(service_reg_info)
       @client.async_request(request) do |response|
-        @services.delete(service_reg_info.service_id)
+        remove_service_callbacks(service_reg_info)
       end
+      @services.delete(service_reg_info.service_id)
     end
 
     def remove_service_sync(service_reg_info,
                             timeout = SERVICE_UNREGISTRATION_REQUEST_TIMEOUT)
-      request = remove_service_common(service_reg_info)
+      request = unregister_service_request(service_reg_info)
       response = @client.sync_request(request, timeout)
       if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
         raise DXLClient::DXLError,
               "Error unregistering service: #{res.error_message} (#{res.error_code})"
       end
-
+      remove_service_callbacks(service_reg_info)
       @services.delete(service_reg_info.service_id)
-    end
-
-    def on_request(request)
-      service_reg_info = @services[request.service_id]
-      service_reg_info.callbacks(request.destination_topic).each do |callback|
-        callback.on_request(request)
-      end
     end
 
     def destroy
@@ -66,11 +64,7 @@ module DXLClient
 
     private
 
-    def add_service_common(service_reg_info)
-      service_reg_info.topics.each do |topic|
-        @client.subscribe(topic)
-      end
-
+    def register_service_request(service_reg_info)
       request = DXLClient::Request.new(DXL_SERVICE_REGISTER_REQUEST_TOPIC)
       request.payload = JSON.dump(serviceType: service_reg_info.service_type,
                                   metaData: service_reg_info.metadata,
@@ -81,14 +75,29 @@ module DXLClient
       request
     end
 
-    def remove_service_common(service_reg_info)
+    # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
+    def add_service_callbacks(service_reg_info)
       service_reg_info.topics.each do |topic|
-        @client.unsubscribe(topic)
+        service_reg_info.callbacks(topic).each do |callback|
+          @client.add_request_callback(topic, callback)
+        end
       end
+    end
 
+    # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
+    def unregister_service_request(service_reg_info)
       request = DXLClient::Request.new(DXL_SERVICE_UNREGISTER_REQUEST_TOPIC)
       request.payload = JSON.dump(serviceGuid: service_reg_info.service_id)
       request
+    end
+
+    # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
+    def remove_service_callbacks(service_reg_info)
+      service_reg_info.topics.each do |topic|
+        service_reg_info.callbacks(topic).each do |callback|
+          @client.remove_request_callback(topic, callback)
+        end
+      end
     end
   end
 

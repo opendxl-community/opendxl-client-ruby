@@ -36,15 +36,15 @@ begin
           response = client.sync_request(request)
 
           if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-            logger.info("Service Invoker - %s:\n   Topic: %s\n   Payload: %s" %
-              ["Synchronous Error Response received",
-               response.destination_topic,
-               response.error_message])
-          else
-            logger.info("Service Invoker - %s:\n   Topic: %s\n   Payload: %s" %
-                        ["Synchronous Response received",
+            logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
+                         'Synchronous Error Response received',
                          response.destination_topic,
-                         response.payload])
+                         response.error_message)
+          else
+            logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
+                        'Synchronous Response received',
+                         response.destination_topic,
+                         response.payload)
           end
         when '2'
           logger.info(
@@ -57,17 +57,17 @@ begin
               "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}")
           client.async_request(request) do |response|
             if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-              logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s" %
-                              ['Service Invoker - Asynchronous Error Response received',
-                               response.destination_topic,
-                               response.request_message_id,
-                               response.error_message])
+              logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s",
+                           'Service Invoker - Asynchronous Error Response received',
+                           response.destination_topic,
+                           response.request_message_id,
+                           response.error_message)
             else
-              logger.info("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s" %
-                              ['Service Invoker - Asynchronous Response received',
-                               response.destination_topic,
-                               response.request_message_id,
-                               response.payload])
+              logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s",
+                           'Service Invoker - Asynchronous Response received',
+                           response.destination_topic,
+                           response.request_message_id,
+                           response.payload)
             end
           end
         when '9'

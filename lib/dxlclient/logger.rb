@@ -44,11 +44,31 @@ module DXLClient
         raise NotImplementedError
       end
 
+      def debugf(message)
+        raise NotImplementedError
+      end
+
       def error(message)
         raise NotImplementedError
       end
 
+      def errorf(message)
+        raise NotImplementedError
+      end
+
       def info(message)
+        raise NotImplementedError
+      end
+
+      def infof(message)
+        raise NotImplementedError
+      end
+
+      def warn(message)
+        raise NotImplementedError
+      end
+
+      def warnf(message)
         raise NotImplementedError
       end
     end
@@ -80,16 +100,32 @@ module DXLClient
         @parent.debug(@name) { message }
       end
 
+      def debugf(*args)
+        @parent.debug(@name) { format(*args) }
+      end
+
       def error(message)
         @parent.error(@name) { message }
+      end
+
+      def errorf(*args)
+        @parent.error(@name) { format(*args) }
       end
 
       def info(message)
         @parent.info(@name) { message }
       end
 
+      def infof(*args)
+        @parent.info(@name) { format(*args) }
+      end
+
       def warn(message)
         @parent.warn(@name) { message }
+      end
+
+      def warnf(*args)
+        @parent.warn(@name) { format(*args) }
       end
 
       def exception(exception, message=nil)

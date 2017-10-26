@@ -2,19 +2,33 @@ require 'set'
 require 'thread'
 require 'timeout'
 
+require 'dxlclient/response_callback'
+
 module DXLClient
-  class RequestManager
-    def initialize(client)
+  class RequestManager < ResponseCallback
+    # @param client [DXLClient::Client]
+    def initialize(client, reply_to_topic)
+      @logger = DXLClient::Logger.logger(self.class)
       @client = client
 
+      @reply_to_topic = reply_to_topic
       @request_lock = Mutex.new
       @request_condition = ConditionVariable.new
       @requests = {}
       @responses = {}
+
+      @client.add_response_callback(reply_to_topic, self)
     end
 
+    def destroy
+      @client.remove_response_callback(@reply_to_topic, self)
+    end
+
+    # @param response [DXLClient::Response]
     def on_response(response)
       request_message_id = response.request_message_id
+      @logger.debug(
+          "Received response. Request message id: #{request_message_id}.")
       response_callback = nil
 
       @request_lock.synchronize do
@@ -26,14 +40,7 @@ module DXLClient
           @request_condition.broadcast
         end
       end
-
-      if response_callback
-        if response_callback.is_a?(Proc) || response_callback.is_a?(Method)
-          response_callback.call(response)
-        else
-          response_callback.on_response(response)
-       end
-      end
+      response.invoke_callback(response_callback)
     end
 
     def sync_request(request, timeout)

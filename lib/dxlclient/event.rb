@@ -8,5 +8,11 @@ module DXLClient
       super(destination_topic)
       @message_type = DXLClient::Message::MESSAGE_TYPE_EVENT
     end
+
+    private
+
+    def invoke_callback_class_instance(callback)
+      callback.on_event(self)
+    end
   end
 end

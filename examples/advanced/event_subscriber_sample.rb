@@ -22,8 +22,8 @@ begin
       end
 
       def on_event(event)
-        @logger.info("Event Subscriber - %s\n   Topic: %s\n   Payload: %s" %
-          ['Event received', event.destination_topic, event.payload])
+        @logger.infof("Event Subscriber - %s\n   Topic: %s\n   Payload: %s",
+                      'Event received', event.destination_topic, event.payload)
       end
     end
 

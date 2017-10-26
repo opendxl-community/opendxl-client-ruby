@@ -39,6 +39,16 @@ module DXLClient
       @destination_tenant_guids = []
     end
 
+    def invoke_callback(callback)
+      if callback
+        if callback.is_a?(Proc) || callback.is_a?(Method)
+          callback.call(self)
+        else
+          invoke_callback_class_instance(callback)
+        end
+      end
+    end
+
     protected
 
     def version=(version)
@@ -62,6 +72,11 @@ module DXLClient
     end
 
     private
+
+    def invoke_callback_class_instance(callback)
+      raise NotImplementedError,
+            "Callback support not available for this message type: #{self.name}"
+    end
 
     def pack_message_v0(packer)
       packer.write(@message_id)

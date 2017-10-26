@@ -23,23 +23,23 @@ begin
       end
 
       def on_request(request)
-        @logger.info("%s   Topic: %s\n   Request ID: %s\n   Payload: %s" %
-                         ["Service Provider - Request received\n",
-                          request.destination_topic,
-                          request.message_id,
-                          request.payload])
+        @logger.infof("%s   Topic: %s\n   Request ID: %s\n   Payload: %s",
+                      "Service Provider - Request received\n",
+                      request.destination_topic,
+                      request.message_id,
+                      request.payload)
 
-        @logger.info('%s Creating Response for Request ID %s on %s' %
-                         ['Service Provider -',
-                          request.message_id,
-                          request.destination_topic])
+        @logger.infof('%s Creating Response for Request ID %s on %s',
+                      'Service Provider -',
+                      request.message_id,
+                      request.destination_topic)
         response = DXLClient::Response.new(request)
         response.payload = 'Sample Response Payload'
 
-        @logger.info('%s Sending Response for Request ID %s on %s' %
-                         ['Service Provider -',
-                          request.message_id,
-                          request.destination_topic])
+        @logger.infof('%s Sending Response for Request ID %s on %s',
+                      'Service Provider -',
+                      request.message_id,
+                      request.destination_topic)
         @client.send_response(response)
       end
     end

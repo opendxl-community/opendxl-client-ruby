@@ -1,17 +1,18 @@
 require 'mqtt'
 require 'mqtt/client'
 
+require 'dxlclient/callback_manager'
 require 'dxlclient/dxl_error'
-require 'dxlclient/event_manager'
 require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
 require 'dxlclient/request_manager'
+require 'dxlclient/response'
 require 'dxlclient/service_manager'
 require 'dxlclient/uuid_generator'
 
 module DXLClient
   class Client
-    REPLY_TO_PREFIX = '/mcafee/client/'
+    REPLY_TO_PREFIX = '/mcafee/client/'.freeze
     DEFAULT_REQUEST_TIMEOUT = 60 * 60
     MQTT_QOS = 0
 
@@ -22,15 +23,14 @@ module DXLClient
     def initialize(config)
       @logger = DXLClient::Logger.logger(self.class)
       @client_id = UUIDGenerator.generate_id_as_string
+      @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
       @mqtt_client = MQTTClient.new(config)
       @mqtt_client.on_message = method(:on_message)
 
-      @connected = false
-      @event_manager = EventManager.new
-      @request_manager = RequestManager.new(self)
+      @callback_manager = CallbackManager.new(self)
+      @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
-      @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
       return unless block_given?
       begin
@@ -42,15 +42,11 @@ module DXLClient
 
     def connect
       @mqtt_client.connect
-      @connected = true
-      subscribe(@reply_to_topic)
+      @callback_manager.on_connect
     end
 
-    def add_event_callback(topic, callback, subscribe_to_topic=true)
-      @event_manager.add_event_callback(topic, callback)
-      if subscribe_to_topic && !topic.nil?
-        subscribe(topic)
-      end
+    def connected?
+      @mqtt_client.connected?
     end
 
     def register_service_sync(service_reg_info, timeout)
@@ -75,6 +71,8 @@ module DXLClient
     end
 
     def send_request(request)
+      @logger.debugf('Sending request. Topic: %s. Id: %s.',
+                     request.destination_topic, request.message_id)
       request.reply_to_topic = @reply_to_topic
       publish_message(request.destination_topic,
                       MessageEncoder.new.to_bytes(request))
@@ -85,11 +83,12 @@ module DXLClient
                       MessageEncoder.new.to_bytes(response))
     end
 
-    def subscribe(topic)
-      @mqtt_client.subscribe(topic)
+    def subscribe(topics)
+      @logger.debug("Subscribing to topics: #{topics}.")
+      @mqtt_client.subscribe(topics)
     end
 
-    def async_request(request, response_callback=nil, &block)
+    def async_request(request, response_callback = nil, &block)
       if response_callback && block_given?
         raise ArgumentError,
               'Only a callback or block (but not both) may be specified'
@@ -98,19 +97,54 @@ module DXLClient
       @request_manager.async_request(request, callback)
     end
 
-    def sync_request(request, timeout=DEFAULT_REQUEST_TIMEOUT)
+    def sync_request(request, timeout = DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
     end
 
-    def unsubscribe(topic)
-      @mqtt_client.unsubscribe(topic)
+    def unsubscribe(topics)
+      @logger.debug("Unsubscribing from topics: #{topics}.")
+      @mqtt_client.unsubscribe(topics)
+    end
+
+    def add_event_callback(topic, event_callback, subscribe_to_topic = true)
+      @callback_manager.add_callback(DXLClient::Event, topic,
+                                     event_callback,
+                                     subscribe_to_topic)
+    end
+
+    def remove_event_callback(topic, event_callback)
+      @callback_manager.remove_callback(DXLClient::Event, topic,
+                                        event_callback)
+    end
+
+    def add_request_callback(topic, request_callback)
+      @callback_manager.add_callback(DXLClient::Request, topic,
+                                     request_callback)
+    end
+
+    def remove_request_callback(topic, request_callback)
+      @callback_manager.remove_callback(DXLClient::Request, topic,
+                                        request_callback)
+    end
+
+    def add_response_callback(topic, response_callback)
+      @callback_manager.add_callback(DXLClient::Response, topic,
+                                     response_callback)
+    end
+
+    def remove_response_callback(topic, response_callback)
+      @callback_manager.remove_callback(DXLClient::Response, topic,
+                                        response_callback)
     end
 
     def destroy
-      return unless @connected
       @service_manager.destroy
-      unsubscribe(@reply_to_topic)
+      @request_manager.destroy
       @mqtt_client.disconnect
+    rescue MQTT::NotConnectedException
+      @logger.debug(
+        'Unable to complete cleanup since MQTT client not connected'
+      )
     end
 
     private
@@ -118,18 +152,7 @@ module DXLClient
     def on_message(raw_message)
       message = MessageEncoder.new.from_bytes(raw_message.payload)
       message.destination_topic = raw_message.topic
-
-      case message
-        when DXLClient::Event
-          @event_manager.on_event(message)
-        when DXLClient::Request
-          @service_manager.on_request(message)
-        when DXLClient::Response
-          @request_manager.on_response(message)
-        else
-          raise NotImplementedError,
-                "No on_message implementation for #{message}"
-      end
+      @callback_manager.on_message(message)
     end
 
     def publish_message(topic, payload)

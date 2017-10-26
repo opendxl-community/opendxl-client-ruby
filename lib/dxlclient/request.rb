@@ -13,6 +13,10 @@ module DXLClient
 
     private
 
+    def invoke_callback_class_instance(callback)
+      callback.on_request(self)
+    end
+
     def pack_message_v0(packer)
       super(packer)
       packer.write(@reply_to_topic)
