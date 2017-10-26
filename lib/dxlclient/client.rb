@@ -140,7 +140,7 @@ module DXLClient
     def destroy
       @service_manager.destroy
       @request_manager.destroy
-      @mqtt_client.disconnect
+      @mqtt_client.destroy
     rescue MQTT::NotConnectedException
       @logger.debug(
         'Unable to complete cleanup since MQTT client not connected'
