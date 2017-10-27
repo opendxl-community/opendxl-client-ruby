@@ -22,11 +22,16 @@ module DXLClient
     # @param config [DXLClient::Config]
     def initialize(config)
       @logger = DXLClient::Logger.logger(self.class)
+
       @client_id = UUIDGenerator.generate_id_as_string
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
 
+      @subscriptions = Set.new
+      @subscription_lock = Mutex.new
+
       @mqtt_client = MQTTClient.new(config)
-      @mqtt_client.on_message = method(:on_message)
+      @mqtt_client.add_connect_callback(method(:on_connect))
+      @mqtt_client.add_publish_callback(method(:on_message))
 
       @callback_manager = CallbackManager.new(self)
       @request_manager = RequestManager.new(self, @reply_to_topic)
@@ -42,7 +47,6 @@ module DXLClient
 
     def connect
       @mqtt_client.connect
-      @callback_manager.on_connect
     end
 
     def connected?
@@ -83,9 +87,44 @@ module DXLClient
                       MessageEncoder.new.to_bytes(response))
     end
 
+    def subscriptions
+      @subscription_lock.synchronize do
+        @subscriptions.clone
+      end
+    end
+
     def subscribe(topics)
-      @logger.debug("Subscribing to topics: #{topics}.")
-      @mqtt_client.subscribe(topics)
+      @subscription_lock.synchronize do
+        subscriptions = topics_for_mqtt_client(topics)
+        @logger.debug("Subscribing to topics: #{subscriptions}.")
+
+        if @mqtt_client.connected?
+          @mqtt_client.subscribe(subscriptions)
+        end
+
+        if subscriptions.is_a?(String)
+          @subscriptions.add(subscriptions)
+        else
+          @subscriptions.merge(subscriptions)
+        end
+      end
+    end
+
+    def unsubscribe(topics)
+      @subscription_lock.synchronize do
+        subscriptions = topics_for_mqtt_client(topics)
+        @logger.debug("Unsubscribing from topics: #{subscriptions}.")
+
+        if @mqtt_client.connected?
+          @mqtt_client.unsubscribe(subscriptions)
+        end
+
+        if subscriptions.respond_to?(:each)
+          @subscriptions.subtract(subscriptions)
+        else
+          @subscriptions.delete(subscriptions)
+        end
+      end
     end
 
     def async_request(request, response_callback = nil, &block)
@@ -99,11 +138,6 @@ module DXLClient
 
     def sync_request(request, timeout = DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
-    end
-
-    def unsubscribe(topics)
-      @logger.debug("Unsubscribing from topics: #{topics}.")
-      @mqtt_client.unsubscribe(topics)
     end
 
     def add_event_callback(topic, event_callback, subscribe_to_topic = true)
@@ -148,6 +182,29 @@ module DXLClient
     end
 
     private
+
+    def topics_for_mqtt_client(topics)
+      if topics.is_a?(Hash)
+        raise ArgumentError, 'topics cannot be a Hash'
+      elsif topics.respond_to?(:each)
+        [*topics]
+      elsif topics.is_a?(String)
+        topics
+      else
+        raise ArgumentError,
+              "Unsupported data type for topics: #{topics.name}"
+      end
+    end
+
+    def on_connect
+      @subscription_lock.synchronize do
+        unless @subscriptions.empty?
+          topics = [*@subscriptions]
+          @logger.debug("Resubscribing to topics: #{topics}.")
+          @mqtt_client.subscribe(topics)
+        end
+      end
+    end
 
     def on_message(raw_message)
       message = MessageEncoder.new.from_bytes(raw_message.payload)

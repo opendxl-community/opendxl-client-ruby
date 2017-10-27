@@ -1,66 +1,17 @@
 require 'dxlclient/callback_info'
 
 module DXLClient
-  # class MockClient
-  #   attr_accessor :connected
-  #
-  #   def initialize
-  #     @connected = false
-  #   end
-  #
-  #   def subscribe(topic)
-  #     puts("im subscribing: #{topic}")
-  #   end
-  #
-  #   def unsubscribe(topic)
-  #     puts("im unsubscribing: #{topic}")
-  #   end
-  #
-  #   def connected?
-  #     @connected
-  #   end
-  # end
-
   class CallbackManager
     # @param client [DXLClient::Client]
     def initialize(client)
       @logger = DXLClient::Logger.logger(self.class)
       @client = client
       @callbacks_by_class = {}
-      #
-      # @callbacks_by_class = {
-      #     one: {
-      #         'mytopic' =>
-      #             Set.new([
-      #               CallbackInfo.new('blah', true),
-      #             ]),
-      #         'anothertopic' =>
-      #             Set.new([
-      #                 CallbackInfo.new('blah', false),
-      #             ])
-      #     },
-      #     two: {
-      #         'bogustopic' =>
-      #             Set.new([
-      #               CallbackInfo.new('bleh', true)
-      #             ]),
-      #         'mytopic' =>
-      #           Set.new([
-      #                       CallbackInfo.new('bleh', true)
-      #                   ]),
-      #         'mythirdtopic' =>
-      #             Set.new([
-      #                         CallbackInfo.new('bleh', true)
-      #                     ])
-      #     }
-      # }
     end
 
     # @param callback_info [DXLClient::CallbackInfo]
     def add_callback(klass, topic, callback, subscribe_to_topic=true)
-      if @client.connected? && subscribe_to_topic
-        @client.subscribe(topic)
-      end
+      @client.subscribe(topic) if subscribe_to_topic
 
       callbacks_by_topic = @callbacks_by_class[klass]
       unless callbacks_by_topic
@@ -94,12 +45,6 @@ module DXLClient
       end
     end
 
-    def on_connect
-      topics_to_subscribe().each do |topic|
-        @client.subscribe(topic)
-      end
-    end
-
     # @param message [DXLClient::Message]
     def on_message(message)
       @logger.debugf('Received message. Type: %s. Id: %s.',
@@ -125,7 +70,8 @@ module DXLClient
                        message.class.name, message.message_id)
       end
     end
-    # private
+
+    private
 
     def topics_to_subscribe
       @callbacks_by_class.values.reduce(Set.new) do |topics, callbacks_by_topic|
@@ -148,5 +94,5 @@ module DXLClient
     end
   end
 
-  # private_constant :CallbackManager
+  private_constant :CallbackManager
 end

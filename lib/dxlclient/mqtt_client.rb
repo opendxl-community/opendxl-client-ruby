@@ -3,7 +3,7 @@ require 'dxlclient/logger'
 
 module DXLClient
   class MQTTClient < MQTT::Client
-    MQTT_VERSION = '3.1.1'
+    MQTT_VERSION = '3.1.1'.freeze
 
     # Connection state
     NOT_CONNECTED = 0
@@ -24,30 +24,31 @@ module DXLClient
                      :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE,
                      :CONNECTION_RETRY_INTERVAL
 
-    attr_accessor :on_message
-
-    alias :mqtt_connect :connect
-    alias :mqtt_disconnect :disconnect
+    alias mqtt_connect connect
+    alias mqtt_disconnect disconnect
 
     # @param config [DXLClient::Config]
     def initialize(config)
       @config = config
       @logger = DXLClient::Logger.logger(self.class)
 
-      if config.brokers.nil? || config.brokers.length == 0
+      if config.brokers.nil? || config.brokers.empty?
         raise ArgumentError, 'No brokers in configuration so cannot connect'
       end
 
-      super(:client_id => config.client_id,
-            :port => port,
-            :version => MQTT_VERSION,
-            :clean_session => true,
-            :ssl => true)
+      super(client_id: config.client_id,
+            port: port,
+            version: MQTT_VERSION,
+            clean_session: true,
+            ssl: true)
       self.cert_file = config.cert_file
       self.key_file = config.private_key
       self.ca_file = config.broker_ca_bundle
 
       @current_broker = nil
+
+      @on_connect_callbacks = Set.new
+      @on_publish_callbacks = Set.new
 
       @connect_lock = Mutex.new
       @connect_request_condition = ConditionVariable.new
@@ -55,7 +56,6 @@ module DXLClient
       @connect_error = nil
       @connect_state = NOT_CONNECTED
       @connect_request = REQUEST_NONE
-
       @connect_thread = Thread.new { connect_loop }
     end
 
@@ -65,6 +65,18 @@ module DXLClient
         @connect_request_condition.signal
       end
       @connect_thread.join
+    end
+
+    def add_connect_callback(callback)
+      @connect_lock.synchronize do
+        @on_connect_callbacks.add(callback)
+      end
+    end
+
+    def add_publish_callback(callback)
+      @connect_lock.synchronize do
+        @on_publish_callbacks.add(callback)
+      end
     end
 
     def connect
@@ -83,9 +95,7 @@ module DXLClient
             @connect_request = REQUEST_CONNECT
             @connect_request_condition.signal
             @connect_response_condition.wait(@connect_lock)
-            if @connect_error
-              raise @connect_error
-            end
+            raise @connect_error if @connect_error
           end
         end
       end
@@ -97,16 +107,13 @@ module DXLClient
         until @connect_state == NOT_CONNECTED || @connect_state == SHUTDOWN
           if @connect_request == REQUEST_CONNECT
             raise SocketError, 'Failed to disconnect, connect in process'
-          else
-            unless @connect_request == REQUEST_SHUTDOWN
-              @connect_request = REQUEST_DISCONNECT
-            end
-            @connect_request_condition.signal
-            @connect_response_condition.wait(@connect_lock)
-            if @connect_error
-              raise @connect_error
-            end
           end
+          unless @connect_request == REQUEST_SHUTDOWN
+            @connect_request = REQUEST_DISCONNECT
+          end
+          @connect_request_condition.signal
+          @connect_response_condition.wait(@connect_lock)
+          raise @connect_error if @connect_error
         end
       end
     end
@@ -123,16 +130,16 @@ module DXLClient
                 if @connect_request == REQUEST_DISCONNECT
                   do_disconnect
                 elsif @connect_request == REQUEST_CONNECT ||
-                    @connect_state == RECONNECTING
+                      @connect_state == RECONNECTING
                   do_connect
                 end
 
                 if @connect_state == RECONNECTING
-                  error_msg = @connect_error ?
-                                  ": #{@connect_error.message}" : ''
-                  @logger.debugf(
-                      'Connection error%s, retrying connection in %s seconds',
-                                 error_msg, CONNECTION_RETRY_INTERVAL)
+                  error = @connect_error ? ": #{@connect_error.message}" : ''
+                  @logger.debugf('%s%s, %s %s seconds',
+                                 'Connection error',
+                                 error, 'retrying connection in',
+                                 CONNECTION_RETRY_INTERVAL)
                   @connect_request_condition.wait(@connect_lock,
                                                   CONNECTION_RETRY_INTERVAL)
                 else
@@ -143,10 +150,10 @@ module DXLClient
             # disconnection errors
             rescue MQTT::Exception => e
               if @connect_state == CONNECTED &&
-                  [REQUEST_CONNECT, REQUEST_NONE].include?(@connect_request)
+                 [REQUEST_CONNECT, REQUEST_NONE].include?(@connect_request)
                 @connect_state = RECONNECTING
                 @logger.debugf('Connection error: %s, retrying connection',
-                    e.message)
+                               e.message)
               else
                 @logger.debug('Connection error, not retrying connection')
               end
@@ -185,14 +192,18 @@ module DXLClient
       end
 
       if @current_broker.nil?
-        unless @connect_state == RECONNECTING
-          @connect_state = NOT_CONNECTED
-        end
-        unless @connect_error
-          @connect_error = SocketError.new('Unable to connect to any brokers')
-        end
+        @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
+        @connect_error ||= SocketError.new('Unable to connect to any brokers')
       else
         @connect_state = CONNECTED
+        @on_connect_callbacks.each do |callback|
+          begin
+            callback.call
+          rescue StandardError => e
+            @logger.exception(e,
+                              'Error raised by connect callback')
+          end
+        end
       end
     end
 
@@ -208,8 +219,13 @@ module DXLClient
 
     def handle_packet(packet)
       if packet.class == MQTT::Packet::Publish
-        if on_message
-          on_message.call(packet)
+        @on_publish_callbacks.each do |callback|
+          begin
+            callback.call(packet)
+          rescue StandardError => e
+            @logger.exception(e,
+                              'Error raised by publish callback')
+          end
         end
       else
         super(packet)
