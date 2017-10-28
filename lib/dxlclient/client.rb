@@ -23,19 +23,20 @@ module DXLClient
     def initialize(config)
       @logger = DXLClient::Logger.logger(self.class)
 
-      @client_id = UUIDGenerator.generate_id_as_string
-      @reply_to_topic = "#{REPLY_TO_PREFIX}#{@client_id}"
+      @reply_to_topic = "#{REPLY_TO_PREFIX}#{config.client_id}"
 
       @subscriptions = Set.new
       @subscription_lock = Mutex.new
 
       @mqtt_client = MQTTClient.new(config)
-      @mqtt_client.add_connect_callback(method(:on_connect))
-      @mqtt_client.add_publish_callback(method(:on_message))
 
       @callback_manager = CallbackManager.new(self)
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
+
+      @mqtt_client.add_connect_callback(method(:on_connect))
+      @mqtt_client.add_connect_callback(@service_manager.method(:on_connect))
+      @mqtt_client.add_publish_callback(method(:on_message))
 
       return unless block_given?
       begin

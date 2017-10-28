@@ -1,7 +1,8 @@
 
 module DXLClient
   class ServiceRegistrationInfo
-    attr_accessor :destination_tenant_guids, :metadata, :ttl
+    attr_accessor :destination_tenant_guids, :last_registration, :metadata,
+                  :ttl
     attr_reader :service_id, :service_type
 
     DEFAULT_TTL = 60 # minutes
@@ -15,6 +16,7 @@ module DXLClient
       @metadata = {}
       @service_id = UUIDGenerator.generate_id_as_string
       @ttl = DEFAULT_TTL
+      @last_registration = nil
     end
 
     def add_topic(topic, callback)

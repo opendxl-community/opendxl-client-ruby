@@ -56,15 +56,17 @@ module DXLClient
       @connect_error = nil
       @connect_state = NOT_CONNECTED
       @connect_request = REQUEST_NONE
-      @connect_thread = Thread.new { connect_loop }
+      @services_ttl_thread = Thread.new { connect_loop }
     end
 
     def destroy
+      @logger.debug('Destroying MQTT client...')
       @connect_lock.synchronize do
         @connect_request = REQUEST_SHUTDOWN
         @connect_request_condition.signal
       end
-      @connect_thread.join
+      @services_ttl_thread.join
+      @logger.debug('MQTT client destroyed')
     end
 
     def add_connect_callback(callback)
@@ -180,6 +182,7 @@ module DXLClient
         broker.hosts.find do |host|
           self.host = host
           begin
+            @last_ping_response = Time.now
             mqtt_connect
             @logger.info("Connected to broker: #{host}")
             host

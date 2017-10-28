@@ -12,8 +12,8 @@ module DXLClient
       @client = client
 
       @reply_to_topic = reply_to_topic
-      @request_lock = Mutex.new
-      @request_condition = ConditionVariable.new
+      @services_lock = Mutex.new
+      @services_ttl_condition = ConditionVariable.new
       @requests = {}
       @responses = {}
 
@@ -31,13 +31,13 @@ module DXLClient
           "Received response. Request message id: #{request_message_id}.")
       response_callback = nil
 
-      @request_lock.synchronize do
+      @services_lock.synchronize do
         response_callback = @requests[request_message_id]
         if response_callback
           @requests.delete(request_message_id)
         else
           @responses[request_message_id] = response
-          @request_condition.broadcast
+          @services_ttl_condition.broadcast
         end
       end
       response.invoke_callback(response_callback)
@@ -66,13 +66,13 @@ module DXLClient
     private
 
     def register_request(request, response_callback)
-      @request_lock.synchronize do
+      @services_lock.synchronize do
         @requests[request.message_id] = response_callback
       end
     end
 
     def unregister_request(request)
-      @request_lock.synchronize do
+      @services_lock.synchronize do
         @requests.delete(request.message_id)
         @responses.delete(request.message_id)
       end
@@ -80,7 +80,7 @@ module DXLClient
 
     def wait_for_response(request, timeout)
       message_id = request.message_id
-      @request_lock.synchronize do
+      @services_lock.synchronize do
         wait_start = Time.now
         until @responses.include?(message_id)
           now = Time.now
@@ -92,8 +92,8 @@ module DXLClient
             raise Timeout::Error,
                   "Timeout waiting for response to message: #{message_id}"
           end
-          @request_condition.wait(@request_lock,
-                                  wait_time_remaining)
+          @services_ttl_condition.wait(@services_lock,
+                                       wait_time_remaining)
         end
         @responses[message_id]
       end
