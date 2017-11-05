@@ -4,7 +4,7 @@ module DXLClient
   class CallbackManager
     # @param client [DXLClient::Client]
     def initialize(client)
-      @logger = DXLClient::Logger.logger(self.class)
+      @logger = DXLClient::Logger.logger(self.class.name)
       @client = client
       @callbacks_by_class = {}
     end

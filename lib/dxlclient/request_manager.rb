@@ -8,7 +8,7 @@ module DXLClient
   class RequestManager < ResponseCallback
     # @param client [DXLClient::Client]
     def initialize(client, reply_to_topic)
-      @logger = DXLClient::Logger.logger(self.class)
+      @logger = DXLClient::Logger.logger(self.class.name)
       @client = client
 
       @reply_to_topic = reply_to_topic

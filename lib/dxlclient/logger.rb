@@ -7,26 +7,32 @@ module DXLClient
     INFO = ::Logger::INFO
     WARN = ::Logger::WARN
 
-    def self.logger(name)
-      root_logger.logger(name)
+    @root_logger = nil
+    @root_logger_lock = Mutex.new
+
+    def self.logger(name, level = nil)
+      root_logger.logger(name, level)
     end
 
+    # @return [DXLClient::RootLogger]
     def self.root_logger
-      @root_logger ||= StdlibConsoleRootLogger.new
+      @root_logger_lock.synchronize { @root_logger ||= StdlibRootLogger.new }
     end
 
     def self.root_logger=(logger)
-      @root_logger = logger
+      @root_logger_lock.synchronize { @root_logger = logger }
     end
 
     class RootLogger
-      attr_accessor :level
+      attr_accessor :level, :log_device
 
       def initialize
         @level = Logger::INFO
+        @log_device = STDOUT
       end
 
-      def logger(name)
+      # @return [DXLClient::NamedLogger]
+      def logger(_name, _level = nil)
         raise NotImplementedError
       end
     end
@@ -40,100 +46,156 @@ module DXLClient
         @level = level
       end
 
-      def debug(message)
+      def debug(_message)
         raise NotImplementedError
       end
 
-      def debugf(message)
+      def debugf(_message)
         raise NotImplementedError
       end
 
-      def error(message)
+      def error(_message)
         raise NotImplementedError
       end
 
-      def errorf(message)
+      def errorf(_message)
         raise NotImplementedError
       end
 
-      def info(message)
+      def info(_message)
         raise NotImplementedError
       end
 
-      def infof(message)
+      def infof(_message)
         raise NotImplementedError
       end
 
-      def warn(message)
+      def warn(_message)
         raise NotImplementedError
       end
 
-      def warnf(message)
+      def warnf(_message)
         raise NotImplementedError
       end
     end
 
-    class StdlibConsoleRootLogger < RootLogger
+    class StdlibRootLogger < RootLogger
       def initialize
         super
+        @logger = nil
+        @named_loggers = {}
+        @logger_lock = Mutex.new
       end
 
-      def logger(name)
-        StdlibNamedLogger.new(::Logger.new(STDOUT),
-                              name,
-                              @level)
+      def logger(name, level = nil)
+        log = nil
+        @logger_lock.synchronize do
+          unless @logger
+            @logger = ::Logger.new(@log_device)
+            @logger.level = @level
+          end
+          log = @named_loggers[name]
+          if log
+            log.level = level if level
+          else
+            log = StdlibNamedLogger.new(name,
+                                        level ? level : @level,
+                                        self,
+                                        @logger)
+            @named_loggers[name] = log
+          end
+        end
+        update_level
+        log
+      end
+
+      def level
+        @logger_lock.synchronize { @level }
       end
 
       def level=(level)
-        @level = level
+        @logger_lock.synchronize { @level = level }
+        update_level
+      end
+
+      def log_device
+        @logger_lock.synchronize { @log_device }
+      end
+
+      def log_device=(log_device)
+        @logger_lock.synchronize do
+          if @logger
+            raise DXLClient::DXLError,
+                  'Log device cannot be set after logger created'
+          end
+          @log_device = log_device
+        end
+      end
+
+      def update_level
+        @logger_lock.synchronize do
+          if @logger
+            min_level_named_logger = @named_loggers.values.min_by(&:level)
+            if min_level_named_logger && min_level_named_logger.level <= @level
+              @logger.level = min_level_named_logger.level
+            else
+              @logger.level = @level
+            end
+          end
+        end
       end
     end
 
     class StdlibNamedLogger < NamedLogger
-      def initialize(parent, name, level)
+      # @param [StdlibRootLogger] stdlib_root_logger
+      # @param [Logger] logger
+      def initialize(name, level, stdlib_root_logger, logger)
         super(name, level)
-        @parent = parent
-        @parent.level = level
+        @logger = logger
+        @stdlib_root_logger = stdlib_root_logger
+        @level_lock = Mutex.new
+      end
+
+      def add(level, message)
+        @logger.add(level, message, @name) if level >= @level
       end
 
       def debug(message)
-        @parent.debug(@name) { message }
+        add(DEBUG, message)
       end
 
       def debugf(*args)
-        @parent.debug(@name) { format(*args) }
+        add(DEBUG, format(*args))
       end
 
       def error(message)
-        @parent.error(@name) { message }
+        add(ERROR, message)
       end
 
       def errorf(*args)
-        @parent.error(@name) { format(*args) }
+        add(ERROR, format(*args))
       end
 
       def info(message)
-        @parent.info(@name) { message }
+        add(INFO, message)
       end
 
       def infof(*args)
-        @parent.info(@name) { format(*args) }
+        add(INFO, format(*args))
       end
 
       def warn(message)
-        @parent.warn(@name) { message }
+        add(WARN, message)
       end
 
       def warnf(*args)
-        @parent.warn(@name) { format(*args) }
+        add(WARN, format(*args))
       end
 
-      def exception(exception, message=nil)
+      def exception(exception, message = nil)
         log_message = StringIO.new
 
-        if message
-          log_message << "#{message}: "
-        end
+        log_message << "#{message}: " if message
 
         log_message << exception.message
         log_message << " (#{exception.class})"
@@ -147,14 +209,15 @@ module DXLClient
       end
 
       def level
-        @parent.level
+        @level_lock.synchronize { @level }
       end
 
       def level=(level)
-        @parent.level = level
+        @level_lock.synchronize { @level = level }
+        @stdlib_root_logger.update_level
       end
     end
 
-    private_constant :StdlibConsoleRootLogger, :NamedLogger
+    private_constant :StdlibRootLogger, :StdlibNamedLogger
   end
 end

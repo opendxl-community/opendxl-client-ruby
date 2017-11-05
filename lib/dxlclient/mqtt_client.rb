@@ -30,7 +30,7 @@ module DXLClient
     # @param config [DXLClient::Config]
     def initialize(config)
       @config = config
-      @logger = DXLClient::Logger.logger(self.class)
+      @logger = DXLClient::Logger.logger(self.class.name)
 
       if config.brokers.nil? || config.brokers.empty?
         raise ArgumentError, 'No brokers in configuration so cannot connect'

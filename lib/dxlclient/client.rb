@@ -21,7 +21,7 @@ module DXLClient
 
     # @param config [DXLClient::Config]
     def initialize(config)
-      @logger = DXLClient::Logger.logger(self.class)
+      @logger = DXLClient::Logger.logger(self.class.name)
 
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{config.client_id}"
 

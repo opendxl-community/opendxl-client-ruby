@@ -20,7 +20,7 @@ module DXLClient
 
     # @param client [DXLClient::Client]
     def initialize(client)
-      @logger = DXLClient::Logger.logger(self.class)
+      @logger = DXLClient::Logger.logger(self.class.name)
 
       @client = client
       @services = {}
