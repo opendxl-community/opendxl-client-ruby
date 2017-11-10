@@ -15,6 +15,7 @@ event_count_condition = ConditionVariable.new
 event_count = [0]
 
 config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
+config.incoming_message_thread_pool_size = 10
 
 DXLClient::Client.new(config) do |client|
   client.connect

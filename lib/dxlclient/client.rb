@@ -30,7 +30,10 @@ module DXLClient
 
       @mqtt_client = MQTTClient.new(config)
 
-      @callback_manager = CallbackManager.new(self)
+      @callback_manager = CallbackManager.new(
+          self,
+          config.incoming_message_queue_size,
+          config.incoming_message_thread_pool_size)
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
 

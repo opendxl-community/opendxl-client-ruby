@@ -40,7 +40,8 @@ module DXLClient
             port: port,
             version: MQTT_VERSION,
             clean_session: true,
-            ssl: true)
+            ssl: true,
+            keep_alive: config.keep_alive_interval)
       self.cert_file = config.cert_file
       self.key_file = config.private_key
       self.ca_file = config.broker_ca_bundle
@@ -56,7 +57,10 @@ module DXLClient
       @connect_error = nil
       @connect_state = NOT_CONNECTED
       @connect_request = REQUEST_NONE
-      @services_ttl_thread = Thread.new { connect_loop }
+      @services_ttl_thread = Thread.new do
+        Thread.current.name = 'DXLMQTTClientConnection'
+        connect_loop
+      end
     end
 
     def destroy

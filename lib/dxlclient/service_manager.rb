@@ -27,7 +27,10 @@ module DXLClient
 
       @services_lock = Mutex.new
       @services_ttl_condition = ConditionVariable.new
-      @services_ttl_thread = Thread.new { services_ttl_loop }
+      @services_ttl_thread = Thread.new do
+        Thread.current.name = 'DXLServiceManager'
+        services_ttl_loop
+      end
       @services_ttl_loop_continue = true
     end
 

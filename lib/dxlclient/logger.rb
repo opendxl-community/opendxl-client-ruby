@@ -77,6 +77,10 @@ module DXLClient
       def warnf(_message)
         raise NotImplementedError
       end
+
+      def exception(exception, message = nil)
+        raise NotImplementedError
+      end
     end
 
     class StdlibRootLogger < RootLogger
