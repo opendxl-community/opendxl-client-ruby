@@ -11,6 +11,10 @@ module DXLClient
 
     # @param callback_info [DXLClient::CallbackInfo]
     def add_callback(klass, topic, callback, subscribe_to_topic=true)
+      if topic.nil? || topic.length.zero?
+        raise ArgumentError, 'topic cannot be empty'
+      end
+
       @client.subscribe(topic) if subscribe_to_topic
 
       callbacks_by_topic = @callbacks_by_class[klass]
@@ -56,14 +60,20 @@ module DXLClient
               end]
 
       if class_callbacks
-        topic_callbacks = class_callbacks[message.destination_topic]
-        if topic_callbacks
-          topic_callbacks.map(&:callback).each do |callback|
-            message.invoke_callback(callback)
-          end
-        else
+        matching_class_callbacks = class_callbacks.select do |topic|
+          (topic == message.destination_topic) ||
+              (topic[-1] == '#' &&
+                  message.destination_topic.start_with?(topic[0...-1]))
+        end
+        if matching_class_callbacks.length.zero?
           @logger.debugf('No callbacks registered for topic: %s. Id: %s.',
                          message.destination_topic, message.message_id)
+        else
+          matching_class_callbacks.values.each do |topic_callbacks|
+            topic_callbacks.map(&:callback).each do |callback|
+              message.invoke_callback(callback)
+            end
+          end
         end
       else
         @logger.debugf('No callbacks registered for message type: %s. Id: %s.',
