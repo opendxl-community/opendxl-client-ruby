@@ -133,19 +133,22 @@ module DXLClient
         begin
           until @connect_request == REQUEST_SHUTDOWN
             begin
-              until @connect_request == REQUEST_SHUTDOWN
-                connect_loop_main
-              end
+              connect_loop_main until @connect_request == REQUEST_SHUTDOWN
             # disconnection errors
             rescue MQTT::Exception => e
               if @connect_state == CONNECTED &&
-                 ![REQUEST_DISCONNECT,
-                   REQUEST_SHUTDOWN].include?(@connect_request)
+                 ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
+                    @connect_request) && @config.reconnect_when_disconnected
                 @connect_state = RECONNECTING
                 @logger.errorf('Connection error: %s, retrying connection',
                                e.message)
               else
-                @logger.debugf('Connection error, not retrying connection')
+                @connect_state = NOT_CONNECTED unless @connect_state == SHUTDOWN
+                @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
+                error = "Connection error: #{e.message}, not retrying connection"
+                @logger.errorf(error)
+                @connect_error = SocketError.new(error)
+                @connect_response_condition.broadcast
               end
             end
           end
@@ -179,9 +182,10 @@ module DXLClient
       end
 
       if @connect_state == RECONNECTING ||
-          (@connect_request == REQUEST_CONNECT &&
-              @connect_state == NOT_CONNECTED &&
-              !@connect_request_tries_remaining.zero?)
+         (@connect_request == REQUEST_CONNECT &&
+          @connect_state == NOT_CONNECTED &&
+          !@connect_request_tries_remaining.zero? &&
+          @config.reconnect_when_disconnected)
         error = @connect_error ? ": #{@connect_error.message}" : ''
 
         if @connect_retry_delay > @config.reconnect_delay_max
@@ -205,13 +209,14 @@ module DXLClient
 
     def do_connect
       @connect_error = nil
-      @logger.debug('Connecting to broker from connect thread...')
+      @logger.debug('Processing brokers for connection...')
 
       @current_broker = @config.brokers.find do |broker|
         broker.hosts.find do |host|
           self.host = host
           begin
             @last_ping_response = Time.now
+            @logger.debug("Connecting to broker: #{host}...")
             mqtt_connect
             @logger.info("Connected to broker: #{host}")
             host

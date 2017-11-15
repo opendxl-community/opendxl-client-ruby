@@ -13,6 +13,7 @@ module DXLClient
     DEFAULT_RECONNECT_DELAY = 1
     DEFAULT_RECONNECT_DELAY_MAX = 60
     DEFAULT_RECONNECT_DELAY_RANDOM = 0.25
+    DEFAULT_RECONNECT_WHEN_DISCONNECTED = true
 
     private_constant :DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE,
                      :DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE,
@@ -21,14 +22,15 @@ module DXLClient
                      :DEFAULT_RECONNECT_BACK_OFF_MULTIPLIER,
                      :DEFAULT_RECONNECT_DELAY,
                      :DEFAULT_RECONNECT_DELAY_MAX,
-                     :DEFAULT_RECONNECT_DELAY_RANDOM
+                     :DEFAULT_RECONNECT_DELAY_RANDOM,
+                     :DEFAULT_RECONNECT_WHEN_DISCONNECTED
 
     attr_accessor :brokers, :broker_ca_bundle, :client_id,
                   :cert_file, :private_key, :incoming_message_queue_size,
                   :incoming_message_thread_pool_size, :keep_alive_interval,
                   :connect_retries, :reconnect_back_off_multiplier,
                   :reconnect_delay, :reconnect_delay_max,
-                  :reconnect_delay_random
+                  :reconnect_delay_random, :reconnect_when_disconnected
 
     def initialize (broker_ca_bundle: nil,
                     cert_file: nil,
@@ -58,6 +60,7 @@ module DXLClient
       @reconnect_delay = DEFAULT_RECONNECT_DELAY
       @reconnect_delay_max = DEFAULT_RECONNECT_DELAY_MAX
       @reconnect_delay_random = DEFAULT_RECONNECT_DELAY_RANDOM
+      @reconnect_when_disconnected = DEFAULT_RECONNECT_WHEN_DISCONNECTED
     end
 
     # @return [DXLClient::Config]
