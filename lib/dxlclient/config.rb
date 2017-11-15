@@ -7,14 +7,17 @@ module DXLClient
     DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE = 1000
     DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE = 1
     DEFAULT_MQTT_KEEP_ALIVE_INTERVAL = 30 * 60 # 30 minutes
+    DEFAULT_CONNECT_RETRIES = -1 # -1 = infinite
 
     private_constant :DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE,
                      :DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE,
-                     :DEFAULT_MQTT_KEEP_ALIVE_INTERVAL
+                     :DEFAULT_MQTT_KEEP_ALIVE_INTERVAL,
+                     :DEFAULT_CONNECT_RETRIES
 
     attr_accessor :brokers, :broker_ca_bundle, :client_id,
                   :cert_file, :private_key, :incoming_message_queue_size,
-                  :incoming_message_thread_pool_size, :keep_alive_interval
+                  :incoming_message_thread_pool_size, :keep_alive_interval,
+                  :connect_retries
 
     def initialize (broker_ca_bundle: nil,
                     cert_file: nil,
@@ -38,6 +41,7 @@ module DXLClient
       @incoming_message_thread_pool_size =
           DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE
       @keep_alive_interval = DEFAULT_MQTT_KEEP_ALIVE_INTERVAL
+      @connect_retries = DEFAULT_CONNECT_RETRIES
     end
 
     # @return [DXLClient::Config]

@@ -57,6 +57,8 @@ module DXLClient
       @connect_error = nil
       @connect_state = NOT_CONNECTED
       @connect_request = REQUEST_NONE
+      @request_tries_remaining = @config.connect_retries
+
       @services_ttl_thread = Thread.new do
         Thread.current.name = 'DXLMQTTClientConnection'
         connect_loop
@@ -133,35 +135,18 @@ module DXLClient
           until @connect_request == REQUEST_SHUTDOWN
             begin
               until @connect_request == REQUEST_SHUTDOWN
-                if @connect_request == REQUEST_DISCONNECT
-                  do_disconnect
-                elsif @connect_request == REQUEST_CONNECT ||
-                      @connect_state == RECONNECTING
-                  do_connect
-                end
-
-                if @connect_state == RECONNECTING
-                  error = @connect_error ? ": #{@connect_error.message}" : ''
-                  @logger.debugf('%s%s, %s %s seconds',
-                                 'Connection error',
-                                 error, 'retrying connection in',
-                                 CONNECTION_RETRY_INTERVAL)
-                  @connect_request_condition.wait(@connect_lock,
-                                                  CONNECTION_RETRY_INTERVAL)
-                else
-                  @connect_response_condition.broadcast
-                  @connect_request_condition.wait(@connect_lock)
-                end
+                connect_loop_main
               end
             # disconnection errors
             rescue MQTT::Exception => e
               if @connect_state == CONNECTED &&
-                 [REQUEST_CONNECT, REQUEST_NONE].include?(@connect_request)
+                 ![REQUEST_DISCONNECT,
+                   REQUEST_SHUTDOWN].include?(@connect_request)
                 @connect_state = RECONNECTING
-                @logger.debugf('Connection error: %s, retrying connection',
+                @logger.errorf('Connection error: %s, retrying connection',
                                e.message)
               else
-                @logger.debug('Connection error, not retrying connection')
+                @logger.debugf('Connection error, not retrying connection')
               end
             end
           end
@@ -178,6 +163,38 @@ module DXLClient
       end
     end
 
+    def connect_loop_main
+      if @connect_request == REQUEST_DISCONNECT
+        do_disconnect
+        @request_tries_remaining = 0
+      elsif @connect_request == REQUEST_CONNECT ||
+          @connect_state == RECONNECTING
+        do_connect
+        if @connect_request == REQUEST_CONNECT
+          if @request_tries_remaining.zero? && @config.connect_retries > 0
+            @request_tries_remaining = @config.connect_retries - 1
+          elsif @request_tries_remaining > 0
+            @request_tries_remaining -= 1
+          end
+        end
+      end
+
+      if @connect_state == RECONNECTING ||
+          (@connect_request == REQUEST_CONNECT &&
+              @connect_state == NOT_CONNECTED &&
+              !@request_tries_remaining.zero?)
+        error = @connect_error ? ": #{@connect_error.message}" : ''
+        @logger.errorf(
+            'Retrying connection in %s seconds. Connection error%s',
+            CONNECTION_RETRY_INTERVAL, error)
+        @connect_request_condition.wait(@connect_lock,
+                                        CONNECTION_RETRY_INTERVAL)
+      else
+        @connect_response_condition.broadcast
+        @connect_request_condition.wait(@connect_lock)
+      end
+    end
+
     def do_connect
       @connect_error = nil
       @logger.debug('Connecting to broker from connect thread...')
@@ -191,7 +208,7 @@ module DXLClient
             @logger.info("Connected to broker: #{host}")
             host
           rescue StandardError => e
-            @logger.debug("Failed to connect to #{host}: #{e.message}")
+            @logger.error("Failed to connect to #{host}: #{e.message}")
             @connect_error = e
             nil
           end
