@@ -7,17 +7,28 @@ module DXLClient
     DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE = 1000
     DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE = 1
     DEFAULT_MQTT_KEEP_ALIVE_INTERVAL = 30 * 60 # 30 minutes
+
     DEFAULT_CONNECT_RETRIES = -1 # -1 = infinite
+    DEFAULT_RECONNECT_BACK_OFF_MULTIPLIER = 2
+    DEFAULT_RECONNECT_DELAY = 1
+    DEFAULT_RECONNECT_DELAY_MAX = 60
+    DEFAULT_RECONNECT_DELAY_RANDOM = 0.25
 
     private_constant :DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE,
                      :DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE,
                      :DEFAULT_MQTT_KEEP_ALIVE_INTERVAL,
-                     :DEFAULT_CONNECT_RETRIES
+                     :DEFAULT_CONNECT_RETRIES,
+                     :DEFAULT_RECONNECT_BACK_OFF_MULTIPLIER,
+                     :DEFAULT_RECONNECT_DELAY,
+                     :DEFAULT_RECONNECT_DELAY_MAX,
+                     :DEFAULT_RECONNECT_DELAY_RANDOM
 
     attr_accessor :brokers, :broker_ca_bundle, :client_id,
                   :cert_file, :private_key, :incoming_message_queue_size,
                   :incoming_message_thread_pool_size, :keep_alive_interval,
-                  :connect_retries
+                  :connect_retries, :reconnect_back_off_multiplier,
+                  :reconnect_delay, :reconnect_delay_max,
+                  :reconnect_delay_random
 
     def initialize (broker_ca_bundle: nil,
                     cert_file: nil,
@@ -41,7 +52,12 @@ module DXLClient
       @incoming_message_thread_pool_size =
           DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE
       @keep_alive_interval = DEFAULT_MQTT_KEEP_ALIVE_INTERVAL
+
       @connect_retries = DEFAULT_CONNECT_RETRIES
+      @reconnect_back_off_multiplier = DEFAULT_RECONNECT_BACK_OFF_MULTIPLIER
+      @reconnect_delay = DEFAULT_RECONNECT_DELAY
+      @reconnect_delay_max = DEFAULT_RECONNECT_DELAY_MAX
+      @reconnect_delay_random = DEFAULT_RECONNECT_DELAY_RANDOM
     end
 
     # @return [DXLClient::Config]

@@ -18,11 +18,8 @@ module DXLClient
     REQUEST_DISCONNECT = 2
     REQUEST_SHUTDOWN = 3
 
-    CONNECTION_RETRY_INTERVAL = 5
-
     private_constant :MQTT_VERSION, :NOT_CONNECTED, :CONNECTED,
-                     :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE,
-                     :CONNECTION_RETRY_INTERVAL
+                     :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE
 
     alias mqtt_connect connect
     alias mqtt_disconnect disconnect
@@ -57,7 +54,9 @@ module DXLClient
       @connect_error = nil
       @connect_state = NOT_CONNECTED
       @connect_request = REQUEST_NONE
-      @request_tries_remaining = @config.connect_retries
+
+      @connect_request_tries_remaining = @config.connect_retries
+      @connect_retry_delay = @config.reconnect_delay
 
       @services_ttl_thread = Thread.new do
         Thread.current.name = 'DXLMQTTClientConnection'
@@ -166,15 +165,15 @@ module DXLClient
     def connect_loop_main
       if @connect_request == REQUEST_DISCONNECT
         do_disconnect
-        @request_tries_remaining = 0
+        @connect_request_tries_remaining = 0
       elsif @connect_request == REQUEST_CONNECT ||
           @connect_state == RECONNECTING
         do_connect
         if @connect_request == REQUEST_CONNECT
-          if @request_tries_remaining.zero? && @config.connect_retries > 0
-            @request_tries_remaining = @config.connect_retries - 1
-          elsif @request_tries_remaining > 0
-            @request_tries_remaining -= 1
+          if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
+            @connect_request_tries_remaining = @config.connect_retries - 1
+          elsif @connect_request_tries_remaining > 0
+            @connect_request_tries_remaining -= 1
           end
         end
       end
@@ -182,13 +181,22 @@ module DXLClient
       if @connect_state == RECONNECTING ||
           (@connect_request == REQUEST_CONNECT &&
               @connect_state == NOT_CONNECTED &&
-              !@request_tries_remaining.zero?)
+              !@connect_request_tries_remaining.zero?)
         error = @connect_error ? ": #{@connect_error.message}" : ''
+
+        if @connect_retry_delay > @config.reconnect_delay_max
+          @connect_retry_delay = @config.reconnect_delay_max
+        end
+        @connect_retry_delay += (@config.reconnect_delay_random *
+            @connect_retry_delay * rand)
+
         @logger.errorf(
             'Retrying connection in %s seconds. Connection error%s',
-            CONNECTION_RETRY_INTERVAL, error)
-        @connect_request_condition.wait(@connect_lock,
-                                        CONNECTION_RETRY_INTERVAL)
+            @connect_retry_delay, error)
+
+        @connect_request_condition.wait(@connect_lock, @connect_retry_delay)
+
+        @connect_retry_delay *= @config.reconnect_back_off_multiplier
       else
         @connect_response_condition.broadcast
         @connect_request_condition.wait(@connect_lock)
@@ -220,6 +228,7 @@ module DXLClient
         @connect_error ||= SocketError.new('Unable to connect to any brokers')
       else
         @connect_state = CONNECTED
+        @connect_retry_delay = @config.reconnect_delay
         @on_connect_callbacks.each do |callback|
           begin
             callback.call
