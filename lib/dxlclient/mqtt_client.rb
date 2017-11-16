@@ -180,17 +180,9 @@ module DXLClient
     def connect_loop_main
       if @connect_request == REQUEST_DISCONNECT
         do_disconnect
-        @connect_request_tries_remaining = 0
       elsif @connect_request == REQUEST_CONNECT ||
           @connect_state == RECONNECTING
         do_connect
-        if @connect_request == REQUEST_CONNECT
-          if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
-            @connect_request_tries_remaining = @config.connect_retries - 1
-          elsif @connect_request_tries_remaining > 0
-            @connect_request_tries_remaining -= 1
-          end
-        end
       end
 
       if @connect_state == RECONNECTING ||
@@ -325,6 +317,7 @@ module DXLClient
 
       if connected_broker
         @connect_state = CONNECTED
+        @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
         @connect_retry_delay = @config.reconnect_delay
         @on_connect_callbacks.each do |callback|
           begin
@@ -337,14 +330,22 @@ module DXLClient
       else
         @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
         @connect_error ||= SocketError.new('Unable to connect to any brokers')
+
+        if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
+          @connect_request_tries_remaining = @config.connect_retries - 1
+        elsif @connect_request_tries_remaining > 0
+          @connect_request_tries_remaining -= 1
+        end
       end
     end
 
     def do_disconnect
-      @logger.debug('Disconnecting from broker...')
+      @logger.info('Disconnecting from broker...')
+      @connect_request_tries_remaining = 0
       mqtt_disconnect
       self.current_broker = nil
       @connect_state = NOT_CONNECTED
+      @connect_request = REQUEST_NONE if @connect_request == REQUEST_DISCONNECT
     rescue StandardError => e
       @logger.debug("Failed to disconnect from #{host}: #{e.message}")
       @connect_error = e
