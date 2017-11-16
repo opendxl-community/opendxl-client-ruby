@@ -64,7 +64,7 @@ module DXLClient
       @connect_request_tries_remaining = @config.connect_retries
       @connect_retry_delay = @config.reconnect_delay
 
-      @services_ttl_thread = Thread.new do
+      @connect_thread = Thread.new do
         Thread.current.name = 'DXLMQTTClientConnection'
         connect_loop
       end
@@ -76,7 +76,7 @@ module DXLClient
         @connect_request = REQUEST_SHUTDOWN
         @connect_request_condition.signal
       end
-      @services_ttl_thread.join
+      @connect_thread.join
       @logger.debug('MQTT client destroyed')
     end
 
@@ -198,16 +198,17 @@ module DXLClient
         @connect_retry_delay += (@config.reconnect_delay_random *
             @connect_retry_delay * rand)
 
-        @logger.errorf(
-            'Retrying connection in %s seconds. Connection error%s',
-            @connect_retry_delay, error)
+        @logger.errorf('Retrying connection in %s seconds.',
+                       @connect_retry_delay)
 
         @connect_request_condition.wait(@connect_lock, @connect_retry_delay)
 
         @connect_retry_delay *= @config.reconnect_back_off_multiplier
       else
         @connect_response_condition.broadcast
-        @connect_request_condition.wait(@connect_lock)
+        if @connect_request != REQUEST_SHUTDOWN
+          @connect_request_condition.wait(@connect_lock)
+        end
       end
     end
 
@@ -289,13 +290,22 @@ module DXLClient
     end
 
     def do_connect
-      @connect_error = nil
+      @connect_error = connect_error = nil
 
       @logger.debug('Checking brokers...')
       brokers = get_brokers_by_connection_time
 
       @logger.info('Trying to connect...')
       connected_broker = brokers.find do |_, host, broker|
+        @connect_lock.sleep(0)
+        if @connect_request == REQUEST_SHUTDOWN
+          @logger.info(
+              'Client shutdown in progress, aborting connect attempt')
+          @connect_state = NOT_CONNECTED if @connect_state == RECONNECTING
+          connect_error = SocketError.new(
+              'Failed to connect, client has been shutdown')
+          break
+        end
         self.host = host
         self.port = broker.port
         begin
@@ -303,17 +313,18 @@ module DXLClient
           @logger.debug("Connecting to broker: #{host}:#{broker.port}...")
           mqtt_connect
           @logger.info("Connected to broker: #{host}:#{broker.port}")
-          @connect_error = nil
+          connect_error = nil
           true
         rescue StandardError => e
           @logger.error(
               "Failed to connect to #{host}:#{broker.port}: #{e.message}")
-          @connect_error = e
+          connect_error = e
           false
         end
       end
 
       self.current_broker = connected_broker ? connected_broker[2] : nil
+      @connect_error = connect_error
 
       if connected_broker
         @connect_state = CONNECTED
