@@ -1,3 +1,4 @@
+require 'socket'
 require 'mqtt'
 require 'dxlclient/logger'
 
@@ -18,8 +19,13 @@ module DXLClient
     REQUEST_DISCONNECT = 2
     REQUEST_SHUTDOWN = 3
 
+    CHECK_CONNECTION_TIMEOUT = 1
+
     private_constant :MQTT_VERSION, :NOT_CONNECTED, :CONNECTED,
                      :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE
+
+    attr_accessor :current_broker
+    private :current_broker=
 
     alias mqtt_connect connect
     alias mqtt_disconnect disconnect
@@ -34,7 +40,6 @@ module DXLClient
       end
 
       super(client_id: config.client_id,
-            port: port,
             version: MQTT_VERSION,
             clean_session: true,
             ssl: true,
@@ -44,6 +49,7 @@ module DXLClient
       self.ca_file = config.broker_ca_bundle
 
       @current_broker = nil
+      @current_broker_lock = Mutex.new
 
       @on_connect_callbacks = Set.new
       @on_publish_callbacks = Set.new
@@ -125,6 +131,11 @@ module DXLClient
       end
     end
 
+    # @return [DXLClient::Broker]
+    def current_broker
+      @current_broker_lock.synchronize { @current_broker }
+    end
+
     private
 
     def connect_loop
@@ -136,6 +147,7 @@ module DXLClient
               connect_loop_main until @connect_request == REQUEST_SHUTDOWN
             # disconnection errors
             rescue MQTT::Exception => e
+              self.current_broker = nil
               if @connect_state == CONNECTED &&
                  ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
                     @connect_request) && @config.reconnect_when_disconnected
@@ -207,31 +219,111 @@ module DXLClient
       end
     end
 
-    def do_connect
-      @connect_error = nil
-      @logger.debug('Processing brokers for connection...')
+    def connect_to_broker(host, broker, timeout=CHECK_CONNECTION_TIMEOUT)
+      connected = false
+      start = Time.now
 
-      @current_broker = @config.brokers.find do |broker|
-        broker.hosts.find do |host|
-          self.host = host
-          begin
-            @last_ping_response = Time.now
-            @logger.debug("Connecting to broker: #{host}...")
-            mqtt_connect
-            @logger.info("Connected to broker: #{host}")
-            host
-          rescue StandardError => e
-            @logger.error("Failed to connect to #{host}: #{e.message}")
-            @connect_error = e
-            nil
+      begin
+        addr_info = Socket.getaddrinfo(host, nil)
+      rescue SocketError => e
+        @logger.errorf('Failed to get info for broker host %s: %s',
+                       host, e.message)
+      end
+
+      if addr_info
+        sockaddr = Socket.pack_sockaddr_in(broker.port, host)
+        socket = Socket.new(Socket.const_get(addr_info[0][0]),
+                            Socket::SOCK_STREAM, 0)
+        socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
+        @logger.debug(
+            "Checking connection time for broker: #{host}:#{broker.port}...")
+        begin
+          socket.connect_nonblock(sockaddr)
+          connected = true
+        rescue IO::WaitWritable, Errno::EAGAIN
+          if IO.select(nil, [socket], nil, timeout)
+            begin
+              socket.connect_nonblock(sockaddr)
+              connected = true
+            rescue Errno::EISCONN
+              connected = true
+            end
           end
+          @logger.errorf('Timed out trying to connect to broker %s:%d',
+                         host, broker.port) unless connected
+        rescue Errno::ECONNREFUSED => e
+          @logger.errorf('Failed to connect to broker %s:%d: %s',
+                         host, broker.port, e.message)
+        ensure
+          socket.close
         end
       end
 
-      if @current_broker.nil?
-        @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
-        @connect_error ||= SocketError.new('Unable to connect to any brokers')
-      else
+      connected ? Time.now - start : nil
+    end
+
+    def current_broker=(broker)
+      @current_broker_lock.synchronize { @current_broker = broker }
+    end
+
+    def get_brokers_by_connection_time
+      hosts_to_broker = @config.brokers.reduce({}) do |acc, broker|
+        broker.hosts.each { |host| acc["#{broker.port}:#{host}"] = broker }
+        acc
+      end
+
+      host_connection_threads = hosts_to_broker.collect do |port_host, broker|
+        host = port_host.split(":")[-1]
+        Thread.new do
+          Thread.current.name = "DXLMQTTClientHostCheck-#{host}"
+          [connect_to_broker(host, broker), host, broker]
+        end
+      end
+
+      broker_connection_times = host_connection_threads.collect do |thread|
+        thread.join
+        thread.value
+      end
+
+      broker_connection_times.sort do |a,b|
+        if a[0].nil?
+          1
+        elsif b[0].nil?
+          -1
+        else
+          a[0]<=>b[0]
+        end
+      end
+    end
+
+    def do_connect
+      @connect_error = nil
+
+      @logger.debug('Checking brokers...')
+      brokers = get_brokers_by_connection_time
+
+      @logger.info('Trying to connect...')
+      connected_broker = brokers.find do |_, host, broker|
+        self.host = host
+        self.port = broker.port
+        begin
+          @last_ping_response = Time.now
+          @logger.debug("Connecting to broker: #{host}:#{broker.port}...")
+          mqtt_connect
+          @logger.info("Connected to broker: #{host}:#{broker.port}")
+          @connect_error = nil
+          true
+        rescue StandardError => e
+          @logger.error(
+              "Failed to connect to #{host}:#{broker.port}: #{e.message}")
+          @connect_error = e
+          false
+        end
+      end
+
+      self.current_broker = connected_broker ? connected_broker[2] : nil
+
+      if connected_broker
         @connect_state = CONNECTED
         @connect_retry_delay = @config.reconnect_delay
         @on_connect_callbacks.each do |callback|
@@ -242,12 +334,16 @@ module DXLClient
                               'Error raised by connect callback')
           end
         end
+      else
+        @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
+        @connect_error ||= SocketError.new('Unable to connect to any brokers')
       end
     end
 
     def do_disconnect
-      @logger.debug('Disconnecting from broker from connect thread...')
+      @logger.debug('Disconnecting from broker...')
       mqtt_disconnect
+      self.current_broker = nil
       @connect_state = NOT_CONNECTED
     rescue StandardError => e
       @logger.debug("Failed to disconnect from #{host}: #{e.message}")

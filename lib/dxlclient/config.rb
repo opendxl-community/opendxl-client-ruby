@@ -77,6 +77,12 @@ module DXLClient
     def get_brokers_from_config
       return unless @config_model['Brokers']
       @config_model['Brokers'].lines.collect do |broker_option|
+        if broker_option.kind_of?(Array)
+          raise ArgumentError,
+                format('Broker entry %s defined %d times in config',
+                       broker_option.first.key, broker_option.length)
+        end
+
         broker_info = broker_option.value.split(';')
         if broker_info.length < 2
           raise ArgumentError,

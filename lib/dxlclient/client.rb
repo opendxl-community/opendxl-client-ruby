@@ -57,6 +57,11 @@ module DXLClient
       @mqtt_client.connected?
     end
 
+    # @return [DXLClient::Broker]
+    def current_broker
+      @mqtt_client.current_broker
+    end
+
     def register_service_sync(service_reg_info, timeout)
       @service_manager.add_service_sync(service_reg_info, timeout)
     end
