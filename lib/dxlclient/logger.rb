@@ -92,7 +92,7 @@ module DXLClient
     class StdlibRootLogger < RootLogger
       def initialize
         super
-        @logger = nil
+        @root_logger = nil
         @named_loggers = {}
         @logger_lock = Mutex.new
       end
@@ -100,20 +100,7 @@ module DXLClient
       def logger(name, level = nil)
         log = nil
         @logger_lock.synchronize do
-          unless @logger
-            @logger = ::Logger.new(@log_device)
-            @logger.level = @level
-          end
-          log = @named_loggers[name]
-          if log
-            log.level = level if level
-          else
-            log = StdlibNamedLogger.new(name,
-                                        level ? level : @level,
-                                        self,
-                                        @logger)
-            @named_loggers[name] = log
-          end
+          log = get_named_logger(name, level)
         end
         update_level
         log
@@ -144,15 +131,42 @@ module DXLClient
 
       def update_level
         @logger_lock.synchronize do
-          if @logger
-            min_level_named_logger = @named_loggers.values.min_by(&:level)
-            if min_level_named_logger && min_level_named_logger.level <= @level
-              @logger.level = min_level_named_logger.level
-            else
-              @logger.level = @level
-            end
+          logger = root_logger
+          min_level_named_logger = @named_loggers.values.min_by(&:level)
+          if min_level_named_logger && min_level_named_logger.level <= @level
+            logger.level = min_level_named_logger.level
+          else
+            logger.level = @level
           end
         end
+      end
+
+      private
+
+      def get_named_logger(name, level)
+        log = @named_loggers[name]
+        if log
+          log.level = level if level
+        else
+          log = create_named_logger(name, level)
+        end
+        log
+      end
+
+      def create_named_logger(name, level)
+        StdlibNamedLogger.new(
+          name, level ? level : @level, self, root_logger
+        ).tap do |log|
+          @named_loggers[name] = log
+        end
+      end
+
+      def root_logger
+        unless @root_logger
+          @root_logger = ::Logger.new(@log_device)
+          @root_logger.level = @level
+        end
+        @root_logger
       end
     end
 
