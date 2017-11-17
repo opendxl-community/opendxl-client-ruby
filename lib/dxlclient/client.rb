@@ -12,6 +12,8 @@ require 'dxlclient/uuid_generator'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
+  # rubocop:disable ClassLength
+
   # Class responsible for all communication with the Data Exchange Layer (DXL)
   # fabric (it can be thought of as the "main" class).
   class Client
@@ -19,11 +21,10 @@ module DXLClient
     DEFAULT_REQUEST_TIMEOUT = 60 * 60
     MQTT_QOS = 0
 
-    private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT,
-                     :MQTT_QOS
+    private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT, :MQTT_QOS
 
     # @param config [DXLClient::Config]
-    def initialize(config)
+    def initialize(config, &block)
       @logger = DXLClient::Logger.logger(self.class.name)
 
       @reply_to_topic = "#{REPLY_TO_PREFIX}#{config.client_id}"
@@ -33,24 +34,12 @@ module DXLClient
 
       @mqtt_client = MQTTClient.new(config)
 
-      @callback_manager = CallbackManager.new(
-        self,
-        config.incoming_message_queue_size,
-        config.incoming_message_thread_pool_size
-      )
+      @callback_manager = create_callback_manager(config)
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
 
-      @mqtt_client.add_connect_callback(method(:on_connect))
-      @mqtt_client.add_connect_callback(@service_manager.method(:on_connect))
-      @mqtt_client.add_publish_callback(method(:on_message))
-
-      return unless block_given?
-      begin
-        yield(self)
-      ensure
-        destroy
-      end
+      initialize_mqtt_client
+      handle_initialization_block(block)
     end
 
     def connect
@@ -196,6 +185,29 @@ module DXLClient
     end
 
     private
+
+    def create_callback_manager(config)
+      CallbackManager.new(
+        self,
+        config.incoming_message_queue_size,
+        config.incoming_message_thread_pool_size
+      )
+    end
+
+    def handle_initialization_block(block)
+      return unless block
+      begin
+        block.call(self)
+      ensure
+        destroy
+      end
+    end
+
+    def initialize_mqtt_client
+      @mqtt_client.add_connect_callback(method(:on_connect))
+      @mqtt_client.add_connect_callback(@service_manager.method(:on_connect))
+      @mqtt_client.add_publish_callback(method(:on_message))
+    end
 
     def topics_for_mqtt_client(topics)
       raise ArgumentError, 'topics cannot be a Hash' if topics.is_a?(Hash)
