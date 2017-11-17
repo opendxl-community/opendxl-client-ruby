@@ -4,6 +4,7 @@ require 'dxlclient/dxl_error'
 require 'dxlclient/error_response'
 require 'dxlclient/event'
 require 'dxlclient/message'
+require 'dxlclient/request'
 require 'dxlclient/response'
 require 'dxlclient/uuid_generator'
 
@@ -14,6 +15,15 @@ module DXLClient
   # a subclass of {DXLClient::Message} so that it has access to protected
   # methods for doing encoding and decoding operations.
   class MessageEncoder < Message
+    MESSAGE_TYPE_TO_CLASS = {
+      DXLClient::Message::MESSAGE_TYPE_EVENT => DXLClient::Event,
+      DXLClient::Message::MESSAGE_TYPE_REQUEST => DXLClient::Request,
+      DXLClient::Message::MESSAGE_TYPE_RESPONSE => DXLClient::Response,
+      DXLClient::Message::MESSAGE_TYPE_ERROR => DXLClient::ErrorResponse
+    }.freeze
+
+    private_constant :MESSAGE_TYPE_TO_CLASS
+
     def initialize; end
 
     def from_bytes(raw)
@@ -22,23 +32,11 @@ module DXLClient
       version = unpacker.unpack
       message_type = unpacker.unpack
 
-      case message_type
-      when DXLClient::Message::MESSAGE_TYPE_EVENT
-        message = DXLClient::Event.new('')
-      when DXLClient::Message::MESSAGE_TYPE_REQUEST
-        message = DXLClient::Request.new('')
-      when DXLClient::Message::MESSAGE_TYPE_RESPONSE
-        message = DXLClient::Response.new
-      when DXLClient::Message::MESSAGE_TYPE_ERROR
-        message = DXLClient::ErrorResponse.new
-      else
-        raise DXLClient::DXLError,
-              "Unknown message type: #{message_type}"
+      message_class = MESSAGE_TYPE_TO_CLASS[message_type]
+      unless message_class
+        raise DXLClient::DXLError, "Unknown message type: #{message_type}"
       end
-
-      message.version = version
-      message.unpack_message(unpacker)
-      message
+      create_message(message_class, unpacker, version)
     end
 
     def to_bytes(message)
@@ -53,6 +51,15 @@ module DXLClient
       message.pack_message(packer)
       packer.flush
       io.string
+    end
+
+    private
+
+    def create_message(message_class, unpacker, version)
+      message_class.new.tap do |message|
+        message.version = version
+        message.unpack_message(unpacker)
+      end
     end
   end
 

@@ -7,6 +7,8 @@ module DXLClient
   class Response < Message
     attr_reader :request_message_id, :service_id
 
+    # rubocop:disable MethodLength
+
     # @param request [DXLClient::Request]
     def initialize(request = nil)
       if request
@@ -24,6 +26,7 @@ module DXLClient
       @request = request
       @message_type = Message::MESSAGE_TYPE_RESPONSE
     end
+    # rubocop:enable MethodLength
 
     private
 

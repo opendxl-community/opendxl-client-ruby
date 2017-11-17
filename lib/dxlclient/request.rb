@@ -8,7 +8,7 @@ module DXLClient
   class Request < Message
     attr_accessor :reply_to_topic, :service_id
 
-    def initialize(destination_topic)
+    def initialize(destination_topic = '')
       super(destination_topic)
       @reply_to_topic = nil
       @service_id = ''

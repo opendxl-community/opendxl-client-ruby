@@ -22,6 +22,9 @@ module DXLClient
     attr_reader :message_id, :message_type, :source_client_id,
                 :source_broker_id
 
+    # rubocop: disable MethodLength
+
+    # Constructor
     def initialize(destination_topic)
       @destination_topic = destination_topic
 
@@ -42,7 +45,9 @@ module DXLClient
       @source_tenant_guid = ''
       @destination_tenant_guids = []
     end
+    # rubocop: enable MethodLength
 
+    # Invokes the supplied callback with this message
     def invoke_callback(callback)
       return unless callback
       if callback.is_a?(Proc) || callback.is_a?(Method)
