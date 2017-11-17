@@ -34,9 +34,10 @@ module DXLClient
       @mqtt_client = MQTTClient.new(config)
 
       @callback_manager = CallbackManager.new(
-          self,
-          config.incoming_message_queue_size,
-          config.incoming_message_thread_pool_size)
+        self,
+        config.incoming_message_queue_size,
+        config.incoming_message_thread_pool_size
+      )
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
 
@@ -114,9 +115,7 @@ module DXLClient
         subscriptions = topics_for_mqtt_client(topics)
         @logger.debug("Subscribing to topics: #{subscriptions}.")
 
-        if @mqtt_client.connected?
-          @mqtt_client.subscribe(subscriptions)
-        end
+        @mqtt_client.subscribe(subscriptions) if @mqtt_client.connected?
 
         if subscriptions.is_a?(String)
           @subscriptions.add(subscriptions)
@@ -131,9 +130,7 @@ module DXLClient
         subscriptions = topics_for_mqtt_client(topics)
         @logger.debug("Unsubscribing from topics: #{subscriptions}.")
 
-        if @mqtt_client.connected?
-          @mqtt_client.unsubscribe(subscriptions)
-        end
+        @mqtt_client.unsubscribe(subscriptions) if @mqtt_client.connected?
 
         if subscriptions.respond_to?(:each)
           @subscriptions.subtract(subscriptions)
@@ -201,9 +198,8 @@ module DXLClient
     private
 
     def topics_for_mqtt_client(topics)
-      if topics.is_a?(Hash)
-        raise ArgumentError, 'topics cannot be a Hash'
-      elsif topics.respond_to?(:each)
+      raise ArgumentError, 'topics cannot be a Hash' if topics.is_a?(Hash)
+      if topics.respond_to?(:each)
         [*topics]
       elsif topics.is_a?(String)
         topics

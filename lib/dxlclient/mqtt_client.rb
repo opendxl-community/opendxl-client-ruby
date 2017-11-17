@@ -2,7 +2,11 @@ require 'socket'
 require 'mqtt'
 require 'dxlclient/logger'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Subclass of the {MQTT:Client} class which provides custom connection
+  # handling for DXL - for example, reconnection on disconnect and dispatching
+  # callbacks for connection and message publish events.
   class MQTTClient < MQTT::Client
     MQTT_VERSION = '3.1.1'.freeze
 
@@ -23,9 +27,6 @@ module DXLClient
 
     private_constant :MQTT_VERSION, :NOT_CONNECTED, :CONNECTED,
                      :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE
-
-    attr_accessor :current_broker
-    private :current_broker=
 
     alias mqtt_connect connect
     alias mqtt_disconnect disconnect
@@ -150,14 +151,18 @@ module DXLClient
               self.current_broker = nil
               if @connect_state == CONNECTED &&
                  ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
-                    @connect_request) && @config.reconnect_when_disconnected
+                   @connect_request
+                 ) && @config.reconnect_when_disconnected
                 @connect_state = RECONNECTING
                 @logger.errorf('Connection error: %s, retrying connection',
                                e.message)
               else
                 @connect_state = NOT_CONNECTED unless @connect_state == SHUTDOWN
-                @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
-                error = "Connection error: #{e.message}, not retrying connection"
+                if @connect_request == REQUEST_CONNECT
+                  @connect_request = REQUEST_NONE
+                end
+                error = format('Connection error: %s, not retrying connection',
+                               e.message)
                 @logger.errorf(error)
                 @connect_error = SocketError.new(error)
                 @connect_response_condition.broadcast
@@ -181,7 +186,7 @@ module DXLClient
       if @connect_request == REQUEST_DISCONNECT
         do_disconnect
       elsif @connect_request == REQUEST_CONNECT ||
-          @connect_state == RECONNECTING
+            @connect_state == RECONNECTING
         do_connect
       end
 
@@ -190,8 +195,6 @@ module DXLClient
           @connect_state == NOT_CONNECTED &&
           !@connect_request_tries_remaining.zero? &&
           @config.reconnect_when_disconnected)
-        error = @connect_error ? ": #{@connect_error.message}" : ''
-
         if @connect_retry_delay > @config.reconnect_delay_max
           @connect_retry_delay = @config.reconnect_delay_max
         end
@@ -212,7 +215,7 @@ module DXLClient
       end
     end
 
-    def connect_to_broker(host, broker, timeout=CHECK_CONNECTION_TIMEOUT)
+    def connect_to_broker(host, broker, timeout = CHECK_CONNECTION_TIMEOUT)
       connected = false
       start = Time.now
 
@@ -229,7 +232,8 @@ module DXLClient
                             Socket::SOCK_STREAM, 0)
         socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
         @logger.debug(
-            "Checking connection time for broker: #{host}:#{broker.port}...")
+          "Checking connection time for broker: #{host}:#{broker.port}..."
+        )
         begin
           socket.connect_nonblock(sockaddr)
           connected = true
@@ -242,8 +246,10 @@ module DXLClient
               connected = true
             end
           end
-          @logger.errorf('Timed out trying to connect to broker %s:%d',
-                         host, broker.port) unless connected
+          unless connected
+            @logger.errorf('Timed out trying to connect to broker %s:%d',
+                           host, broker.port)
+          end
         rescue Errno::ECONNREFUSED => e
           @logger.errorf('Failed to connect to broker %s:%d: %s',
                          host, broker.port, e.message)
@@ -259,14 +265,13 @@ module DXLClient
       @current_broker_lock.synchronize { @current_broker = broker }
     end
 
-    def get_brokers_by_connection_time
-      hosts_to_broker = @config.brokers.reduce({}) do |acc, broker|
+    def brokers_by_connection_time
+      hosts_to_broker = @config.brokers.each_with_object({}) do |broker, acc|
         broker.hosts.each { |host| acc["#{broker.port}:#{host}"] = broker }
-        acc
       end
 
       host_connection_threads = hosts_to_broker.collect do |port_host, broker|
-        host = port_host.split(":")[-1]
+        host = port_host.split(':')[-1]
         Thread.new do
           Thread.current.name = "DXLMQTTClientHostCheck-#{host}"
           [connect_to_broker(host, broker), host, broker]
@@ -278,13 +283,13 @@ module DXLClient
         thread.value
       end
 
-      broker_connection_times.sort do |a,b|
+      broker_connection_times.sort do |a, b|
         if a[0].nil?
           1
         elsif b[0].nil?
           -1
         else
-          a[0]<=>b[0]
+          a[0] <=> b[0]
         end
       end
     end
@@ -293,17 +298,19 @@ module DXLClient
       @connect_error = connect_error = nil
 
       @logger.debug('Checking brokers...')
-      brokers = get_brokers_by_connection_time
+      brokers = brokers_by_connection_time
 
       @logger.info('Trying to connect...')
       connected_broker = brokers.find do |_, host, broker|
         @connect_lock.sleep(0)
         if @connect_request == REQUEST_SHUTDOWN
           @logger.info(
-              'Client shutdown in progress, aborting connect attempt')
+            'Client shutdown in progress, aborting connect attempt'
+          )
           @connect_state = NOT_CONNECTED if @connect_state == RECONNECTING
           connect_error = SocketError.new(
-              'Failed to connect, client has been shutdown')
+            'Failed to connect, client has been shutdown'
+          )
           break
         end
         self.host = host
@@ -317,7 +324,8 @@ module DXLClient
           true
         rescue StandardError => e
           @logger.error(
-              "Failed to connect to #{host}:#{broker.port}: #{e.message}")
+            "Failed to connect to #{host}:#{broker.port}: #{e.message}"
+          )
           connect_error = e
           false
         end

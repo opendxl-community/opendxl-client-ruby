@@ -3,7 +3,7 @@ require 'dxlclient/queue_thread_pool'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # Class which handles registrations and dispatches messages to callbacks.
+  # Manager which handles registrations and dispatches messages to callbacks.
   class CallbackManager
     # @param client [DXLClient::Client]
     def initialize(client, callback_queue_size, callback_thread_pool_size)

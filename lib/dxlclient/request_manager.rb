@@ -4,7 +4,11 @@ require 'timeout'
 
 require 'dxlclient/response_callback'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  #  Manager that tracks outstanding requests and notifies the appropriate
+  #  parties (invoking a response callback, notifying a waiting object, etc.)
+  #  when a corresponding response is received.
   class RequestManager < ResponseCallback
     # @param client [DXLClient::Client]
     def initialize(client, reply_to_topic)
@@ -28,7 +32,8 @@ module DXLClient
     def on_response(response)
       request_message_id = response.request_message_id
       @logger.debug(
-          "Received response. Request message id: #{request_message_id}.")
+        "Received response. Request message id: #{request_message_id}."
+      )
       response_callback = nil
 
       @services_lock.synchronize do
@@ -53,11 +58,11 @@ module DXLClient
       end
     end
 
-    def async_request(request, response_callback=nil)
+    def async_request(request, response_callback = nil)
       register_request(request, response_callback)
       begin
         @client.send_request(request)
-      rescue
+      rescue MQTT::NotConnectedException, SocketError
         unregister_request(request)
         raise
       end
@@ -84,9 +89,7 @@ module DXLClient
         wait_start = Time.now
         until @responses.include?(message_id)
           now = Time.now
-          if now < wait_start
-            wait_start = now
-          end
+          wait_start = now if now < wait_start
           wait_time_remaining = wait_start - now + timeout
           if wait_time_remaining <= 0
             raise Timeout::Error,

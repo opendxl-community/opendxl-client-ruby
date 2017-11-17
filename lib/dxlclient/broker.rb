@@ -1,4 +1,6 @@
+# Module under which all of the DXL client functionality resides
 module DXLClient
+  # Class which represents a DXL message broker.
   class Broker
     attr_reader :hosts, :id, :port
 

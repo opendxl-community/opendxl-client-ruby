@@ -2,7 +2,9 @@ require 'msgpack'
 
 require 'dxlclient/uuid_generator'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Base class for the different Data Exchange Layer (DXL) message types
   class Message
     DEFAULT_MESSAGE_VERSION = 2
 
@@ -13,10 +15,12 @@ module DXLClient
 
     attr_accessor :broker_ids, :client_ids, :destination_topic,
                   :destination_tenant_guids, :other_fields, :payload,
-                  :source_tenant_guid
+                  :source_tenant_guid, :version
 
-    attr_reader :message_id, :message_type, :version,
-                :source_client_id, :source_broker_id
+    protected :version=
+
+    attr_reader :message_id, :message_type, :source_client_id,
+                :source_broker_id
 
     def initialize(destination_topic)
       @destination_topic = destination_topic
@@ -40,29 +44,20 @@ module DXLClient
     end
 
     def invoke_callback(callback)
-      if callback
-        if callback.is_a?(Proc) || callback.is_a?(Method)
-          callback.call(self)
-        else
-          invoke_callback_class_instance(callback)
-        end
+      return unless callback
+      if callback.is_a?(Proc) || callback.is_a?(Method)
+        callback.call(self)
+      else
+        invoke_callback_class_instance(callback)
       end
     end
 
     protected
 
-    def version=(version)
-      @version = version
-    end
-
     def unpack_message(unpacker)
       unpack_message_v0(unpacker)
-      if @version > 0
-        unpack_message_v1(unpacker)
-      end
-      if @version > 1
-        unpack_message_v2(unpacker)
-      end
+      unpack_message_v1(unpacker) if @version > 0
+      unpack_message_v2(unpacker) if @version > 1
     end
 
     def pack_message(packer)
@@ -73,9 +68,10 @@ module DXLClient
 
     private
 
-    def invoke_callback_class_instance(callback)
+    def invoke_callback_class_instance(_callback)
       raise NotImplementedError,
-            "Callback support not available for this message type: #{self.name}"
+            format('Callback support not available for this message type: %s',
+                   self.class.name)
     end
 
     def pack_message_v0(packer)
@@ -97,21 +93,21 @@ module DXLClient
     end
 
     def unpack_message_v0(unpacker)
-      @message_id = unpacker.unpack()
-      @source_client_id = unpacker.unpack()
-      @source_broker_id = unpacker.unpack()
-      @broker_ids = unpacker.unpack()
-      @client_ids = unpacker.unpack()
-      @payload = unpacker.unpack()
+      @message_id = unpacker.unpack
+      @source_client_id = unpacker.unpack
+      @source_broker_id = unpacker.unpack
+      @broker_ids = unpacker.unpack
+      @client_ids = unpacker.unpack
+      @payload = unpacker.unpack
     end
 
     def unpack_message_v1(unpacker)
-      @other_fields = Hash[*unpacker.unpack()]
+      @other_fields = Hash[*unpacker.unpack]
     end
 
     def unpack_message_v2(unpacker)
-      @source_tenant_guid = unpacker.unpack()
-      @destination_tenant_guids = unpacker.unpack()
+      @source_tenant_guid = unpacker.unpack
+      @destination_tenant_guids = unpacker.unpack
     end
   end
 end

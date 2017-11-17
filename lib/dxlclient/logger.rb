@@ -1,6 +1,8 @@
 require 'logger'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Logger to which all code under the DXLClient module logs messages.
   module Logger
     DEBUG = ::Logger::DEBUG
     ERROR = ::Logger::ERROR
@@ -23,6 +25,7 @@ module DXLClient
       @root_logger_lock.synchronize { @root_logger = logger }
     end
 
+    # Subclasses of this base class define a "singleton" root logger.
     class RootLogger
       attr_accessor :level, :log_device
 
@@ -37,6 +40,8 @@ module DXLClient
       end
     end
 
+    # Subclasses of this base class define a named logger. The logger's name
+    # can be written out as part of each logged message.
     class NamedLogger
       attr_accessor :level
       attr_reader :name
@@ -78,11 +83,12 @@ module DXLClient
         raise NotImplementedError
       end
 
-      def exception(exception, message = nil)
+      def exception(_exception, _message = nil)
         raise NotImplementedError
       end
     end
 
+    # Root logger which uses Ruby's built-in logger to log messages.
     class StdlibRootLogger < RootLogger
       def initialize
         super
@@ -150,6 +156,7 @@ module DXLClient
       end
     end
 
+    # Named logger which uses Ruby's built-in logger to log messages.
     class StdlibNamedLogger < NamedLogger
       # @param [StdlibRootLogger] stdlib_root_logger
       # @param [Logger] logger

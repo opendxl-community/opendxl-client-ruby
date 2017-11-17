@@ -3,7 +3,12 @@ require 'set'
 
 require 'dxlclient/dxl_error'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Manager which handles service registrations with the DXL fabric. The
+  # manager re-registers locally registered services with the DXL fabric as the
+  # service's Time-To-Live value expires. The manager also re-registers
+  # services with the DXL fabric as disconnect / reconnect events occur.
   class ServiceManager
     DXL_SERVICE_REGISTER_REQUEST_TOPIC = \
       '/mcafee/service/dxl/svcregistry/register'.freeze

@@ -1,6 +1,9 @@
 require 'dxlclient/message'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # {DXLClient::Event} messages are sent using the
+  # {DXLClient::Client#send_event} method of a client instance.
   class Event < Message
     attr_reader :message_type
 

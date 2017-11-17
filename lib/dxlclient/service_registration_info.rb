@@ -1,5 +1,8 @@
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Service Registration instances are used to register and expose services
+  # onto a DXL fabric.
   class ServiceRegistrationInfo
     attr_accessor :destination_tenant_guids, :last_registration, :metadata,
                   :ttl

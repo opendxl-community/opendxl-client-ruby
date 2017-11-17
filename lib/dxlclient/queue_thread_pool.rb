@@ -1,7 +1,9 @@
 require 'dxlclient/callback_info'
 require 'dxlclient/dxl_error'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Pool of threads consuming tasks from a queue
   class QueueThreadPool
     def initialize(queue_size, num_threads, thread_prefix)
       @logger = DXLClient::Logger.logger(self.class.name)

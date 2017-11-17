@@ -1,6 +1,10 @@
 require 'dxlclient/message'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # {DXLClient::Request} messages are send using the
+  # {DXLClient::Client#sync_request} and #{DXLClient::Client#async_request}
+  # methods of a client instance.
   class Request < Message
     attr_accessor :reply_to_topic, :service_id
 
@@ -25,8 +29,8 @@ module DXLClient
 
     def unpack_message_v0(unpacker)
       super(unpacker)
-      @reply_to_topic = unpacker.unpack()
-      @service_id = unpacker.unpack()
+      @reply_to_topic = unpacker.unpack
+      @service_id = unpacker.unpack
     end
   end
 end

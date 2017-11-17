@@ -1,4 +1,6 @@
 Gemfile.lock
-vendor/
+vendor
 .bundle
 examples/dxlclient.config
+.yardoc
+doc
