@@ -1,4 +1,5 @@
 require 'dxlclient/callback_info'
+require 'dxlclient/dxl_error'
 
 module DXLClient
   class QueueThreadPool
@@ -7,22 +8,36 @@ module DXLClient
       @queue_size = queue_size
       @thread_prefix = thread_prefix
       @task_queue = SizedQueue.new(queue_size)
-      @logger.debugf('Creating thread pool. Threads: %d. Queue depth: %s.',
-                     num_threads, queue_size)
+      @logger.debugf('Creating thread pool %s. Threads: %d. Queue depth: %s.',
+                     thread_prefix, num_threads, queue_size)
       @task_threads = Array.new(num_threads) do |thread_id|
         Thread.new { thread_run(thread_id + 1) }
       end
+      @destroy_lock = Mutex.new
+      @pool_alive = true
     end
 
     def add_task(&block)
       raise ArgumentError, 'Block not given for task' unless block
-      @task_queue.push(block)
+      @destroy_lock.synchronize do
+        unless @pool_alive
+          raise DXLClient::ShutdownError,
+                format('Thread pool %s has already been destroyed, %s',
+                       @thread_prefix, 'cannot add new task')
+        end
+        @task_queue.push(block)
+      end
     end
 
-    def shutdown
-      return unless @task_threads.any?(&:alive?)
-      @task_queue.push(:done)
-      @task_threads.each(&:join)
+    def destroy
+      @destroy_lock.synchronize do
+        return unless @task_threads.any?(&:alive?)
+        @logger.debugf('Destroying thread pool %s...', @thread_prefix)
+        @task_queue.push(:done)
+        @task_threads.each(&:join)
+        @logger.debugf('Thread pool %s destroyed', @thread_prefix)
+        @pool_alive = false
+      end
     end
 
     private

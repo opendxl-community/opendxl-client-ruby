@@ -10,7 +10,10 @@ require 'dxlclient/response'
 require 'dxlclient/service_manager'
 require 'dxlclient/uuid_generator'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Class responsible for all communication with the Data Exchange Layer (DXL)
+  # fabric (it can be thought of as the "main" class).
   class Client
     REPLY_TO_PREFIX = '/mcafee/client/'.freeze
     DEFAULT_REQUEST_TIMEOUT = 60 * 60
@@ -187,6 +190,7 @@ module DXLClient
     def destroy
       @service_manager.destroy
       @request_manager.destroy
+      @callback_manager.destroy
       @mqtt_client.destroy
     rescue MQTT::NotConnectedException
       @logger.debug(

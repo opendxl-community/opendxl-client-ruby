@@ -1,7 +1,9 @@
 require 'dxlclient/callback_info'
 require 'dxlclient/queue_thread_pool'
 
+# Module under which all of the DXL client functionality resides.
 module DXLClient
+  # Class which handles registrations and dispatches messages to callbacks.
   class CallbackManager
     # @param client [DXLClient::Client]
     def initialize(client, callback_queue_size, callback_thread_pool_size)
@@ -81,6 +83,10 @@ module DXLClient
         @logger.debugf('No callbacks registered for message type: %s. Id: %s.',
                        message.class.name, message.message_id)
       end
+    end
+
+    def destroy
+      @callback_thread_pool.destroy
     end
 
     private
