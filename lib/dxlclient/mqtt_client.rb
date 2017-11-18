@@ -67,7 +67,7 @@ module DXLClient
 
       @connect_thread = Thread.new do
         Thread.current.name = 'DXLMQTTClientConnection'
-        connect_loop
+        connect_thread_run
       end
     end
 
@@ -97,20 +97,10 @@ module DXLClient
       @logger.debug('Received connect call')
       @connect_lock.synchronize do
         until @connect_state == CONNECTED
-          if @connect_state == SHUTDOWN
+          if @connect_state == SHUTDOWN || @connect_request == REQUEST_SHUTDOWN
             raise SocketError, 'Failed to connect, client has been shutdown'
           end
-          case @connect_request
-          when REQUEST_DISCONNECT
-            raise SocketError, 'Failed to connect, disconnect in process'
-          when REQUEST_SHUTDOWN
-            raise SocketError, 'Failed to connect, shutdown in process'
-          else
-            @connect_request = REQUEST_CONNECT
-            @connect_request_condition.signal
-            @connect_response_condition.wait(@connect_lock)
-            raise @connect_error if @connect_error
-          end
+          handle_connect_request
         end
       end
     end
@@ -119,15 +109,7 @@ module DXLClient
       @logger.debug('Received disconnect call')
       @connect_lock.synchronize do
         until @connect_state == NOT_CONNECTED || @connect_state == SHUTDOWN
-          if @connect_request == REQUEST_CONNECT
-            raise SocketError, 'Failed to disconnect, connect in process'
-          end
-          unless @connect_request == REQUEST_SHUTDOWN
-            @connect_request = REQUEST_DISCONNECT
-          end
-          @connect_request_condition.signal
-          @connect_response_condition.wait(@connect_lock)
-          raise @connect_error if @connect_error
+          handle_disconnect_request
         end
       end
     end
@@ -139,50 +121,48 @@ module DXLClient
 
     private
 
-    def connect_loop
+    def handle_connect_request
+      raise SocketError, 'Failed to connect, disconnect in process' \
+        if @connect_request == REQUEST_DISCONNECT
+      @connect_request = REQUEST_CONNECT
+      @connect_request_condition.signal
+      @connect_response_condition.wait(@connect_lock)
+      raise @connect_error if @connect_error
+    end
+
+    def handle_disconnect_request
+      if @connect_request == REQUEST_CONNECT
+        raise SocketError, 'Failed to disconnect, connect in process'
+      end
+      unless @connect_request == REQUEST_SHUTDOWN
+        @connect_request = REQUEST_DISCONNECT
+      end
+      @connect_request_condition.signal
+      @connect_response_condition.wait(@connect_lock)
+      raise @connect_error if @connect_error
+    end
+
+    def connect_thread_run
       @logger.debug('Connection thread started')
       @connect_lock.synchronize do
         begin
           until @connect_request == REQUEST_SHUTDOWN
-            begin
-              connect_loop_main until @connect_request == REQUEST_SHUTDOWN
-            # disconnection errors
-            rescue MQTT::Exception => e
-              self.current_broker = nil
-              if @connect_state == CONNECTED &&
-                 ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
-                   @connect_request
-                 ) && @config.reconnect_when_disconnected
-                @connect_state = RECONNECTING
-                @logger.errorf('Connection error: %s, retrying connection',
-                               e.message)
-              else
-                @connect_state = NOT_CONNECTED unless @connect_state == SHUTDOWN
-                if @connect_request == REQUEST_CONNECT
-                  @connect_request = REQUEST_NONE
-                end
-                error = format('Connection error: %s, not retrying connection',
-                               e.message)
-                @logger.errorf(error)
-                @connect_error = SocketError.new(error)
-                @connect_response_condition.broadcast
-              end
-            end
+            run_until_disconnected_or_shutdown
           end
         ensure
-          begin
-            do_disconnect
-          ensure
-            @connect_state = SHUTDOWN
-            @connect_request = REQUEST_NONE
-            @connect_response_condition.broadcast
-            @logger.debug('Connection thread terminating')
-          end
+          connect_thread_shutdown
         end
       end
     end
 
-    def connect_loop_main
+    def run_until_disconnected_or_shutdown
+      process_connect_thread_request until @connect_request == REQUEST_SHUTDOWN
+    # disconnection errors
+    rescue MQTT::Exception => e
+      handle_connection_dropped(e)
+    end
+
+    def process_connect_thread_request
       if @connect_request == REQUEST_DISCONNECT
         do_disconnect
       elsif @connect_request == REQUEST_CONNECT ||
@@ -190,23 +170,13 @@ module DXLClient
         do_connect
       end
 
+      process_connect_thread_response
+    end
+
+    def process_connect_thread_response
       if @connect_state == RECONNECTING ||
-         (@connect_request == REQUEST_CONNECT &&
-          @connect_state == NOT_CONNECTED &&
-          !@connect_request_tries_remaining.zero? &&
-          @config.reconnect_when_disconnected)
-        if @connect_retry_delay > @config.reconnect_delay_max
-          @connect_retry_delay = @config.reconnect_delay_max
-        end
-        @connect_retry_delay += (@config.reconnect_delay_random *
-            @connect_retry_delay * rand)
-
-        @logger.errorf('Retrying connection in %s seconds.',
-                       @connect_retry_delay)
-
-        @connect_request_condition.wait(@connect_lock, @connect_retry_delay)
-
-        @connect_retry_delay *= @config.reconnect_back_off_multiplier
+         should_retry_connection_for_active_request?
+        retry_connection
       else
         @connect_response_condition.broadcast
         if @connect_request != REQUEST_SHUTDOWN
@@ -215,50 +185,101 @@ module DXLClient
       end
     end
 
-    def connect_to_broker(host, broker, timeout = CHECK_CONNECTION_TIMEOUT)
-      connected = false
-      start = Time.now
+    def should_retry_connection_for_active_request?
+      @connect_request == REQUEST_CONNECT &&
+        @connect_state == NOT_CONNECTED &&
+        !@connect_request_tries_remaining.zero? &&
+        @config.reconnect_when_disconnected
+    end
 
+    def retry_connection
+      if @connect_retry_delay > @config.reconnect_delay_max
+        @connect_retry_delay = @config.reconnect_delay_max
+      end
+      @connect_retry_delay += (@config.reconnect_delay_random *
+        @connect_retry_delay * rand)
+
+      @logger.errorf('Retrying connection in %s seconds.',
+                     @connect_retry_delay)
+
+      @connect_request_condition.wait(@connect_lock, @connect_retry_delay)
+
+      @connect_retry_delay *= @config.reconnect_back_off_multiplier
+    end
+
+    def get_broker_connection_time(host, port)
+      connect_successful = false
+      start = Time.now
+      addr_info = get_host_addr_info(host)
+
+      if addr_info
+        @logger.debug(
+          "Checking connection time for broker: #{host}:#{port}..."
+        )
+        connect_successful = can_connect_to_broker?(addr_info, host, port)
+      end
+
+      connect_successful ? Time.now - start : nil
+    end
+
+    def get_host_addr_info(host)
+      addr_info = nil
       begin
         addr_info = Socket.getaddrinfo(host, nil)
       rescue SocketError => e
         @logger.errorf('Failed to get info for broker host %s: %s',
                        host, e.message)
       end
+      addr_info
+    end
 
-      if addr_info
-        sockaddr = Socket.pack_sockaddr_in(broker.port, host)
-        socket = Socket.new(Socket.const_get(addr_info[0][0]),
-                            Socket::SOCK_STREAM, 0)
-        socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
-        @logger.debug(
-          "Checking connection time for broker: #{host}:#{broker.port}..."
-        )
+    def can_connect_to_broker?(addr_info, host, port)
+      with_socket(addr_info, host, port) do |socket, sock_addr|
         begin
-          socket.connect_nonblock(sockaddr)
-          connected = true
+          socket.connect_nonblock(sock_addr)
+          true
         rescue IO::WaitWritable, Errno::EAGAIN
-          if IO.select(nil, [socket], nil, timeout)
-            begin
-              socket.connect_nonblock(sockaddr)
-              connected = true
-            rescue Errno::EISCONN
-              connected = true
-            end
-          end
-          unless connected
-            @logger.errorf('Timed out trying to connect to broker %s:%d',
-                           host, broker.port)
-          end
-        rescue Errno::ECONNREFUSED => e
-          @logger.errorf('Failed to connect to broker %s:%d: %s',
-                         host, broker.port, e.message)
-        ensure
-          socket.close
+          can_connect_to_broker_within_timeout?(socket, sock_addr, host, port)
         end
       end
+    end
 
-      connected ? Time.now - start : nil
+    def with_socket(addr_info, host, port)
+      socket, sock_addr = create_socket(addr_info, host, port)
+      begin
+        yield(socket, sock_addr)
+      rescue Errno::ECONNREFUSED => e
+        @logger.errorf('Failed to connect to broker %s:%d: %s',
+                       host, port, e.message)
+        false
+      ensure
+        socket.close
+      end
+    end
+
+    def create_socket(addr_info, host, port)
+      socket = Socket.new(Socket.const_get(addr_info[0][0]),
+                          Socket::SOCK_STREAM, 0)
+      socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
+      sock_addr = Socket.pack_sockaddr_in(port, host)
+      [socket, sock_addr]
+    end
+
+    def can_connect_to_broker_within_timeout?(socket, sock_addr, host, port)
+      if IO.select(nil, [socket], nil, CHECK_CONNECTION_TIMEOUT)
+        broker_connected?(sock_addr)
+      else
+        @logger.errorf('Timed out trying to connect to broker %s:%d',
+                       host, port)
+        false
+      end
+    end
+
+    def broker_connected?(sock_addr)
+      socket.connect_nonblock(sock_addr)
+      true
+    rescue Errno::EISCONN
+      true
     end
 
     def current_broker=(broker)
@@ -270,20 +291,26 @@ module DXLClient
         broker.hosts.each { |host| acc["#{broker.port}:#{host}"] = broker }
       end
 
-      host_connection_threads = hosts_to_broker.collect do |port_host, broker|
+      broker_info_sorted_by_connection_time(
+        broker_connection_threads(hosts_to_broker).collect do |thread|
+          thread.join
+          thread.value
+        end
+      )
+    end
+
+    def broker_connection_threads(hosts_to_broker)
+      hosts_to_broker.collect do |port_host, broker|
         host = port_host.split(':')[-1]
         Thread.new do
           Thread.current.name = "DXLMQTTClientHostCheck-#{host}"
-          [connect_to_broker(host, broker), host, broker]
+          [get_broker_connection_time(host, broker.port), host, broker]
         end
       end
+    end
 
-      broker_connection_times = host_connection_threads.collect do |thread|
-        thread.join
-        thread.value
-      end
-
-      broker_connection_times.sort do |a, b|
+    def broker_info_sorted_by_connection_time(connection_times)
+      connection_times.sort do |a, b|
         if a[0].nil?
           1
         elsif b[0].nil?
@@ -295,66 +322,89 @@ module DXLClient
     end
 
     def do_connect
-      @connect_error = connect_error = nil
-
-      @logger.debug('Checking brokers...')
+      @logger.info('Checking ability to connect to brokers...')
       brokers = brokers_by_connection_time
 
       @logger.info('Trying to connect...')
+      if connect_to_broker_from_list(brokers)
+        handle_connected_to_broker
+      else
+        handle_failure_to_connect_to_any_brokers
+      end
+    end
+
+    def connect_to_broker_from_list(brokers)
+      @connect_error = connect_error = nil
+
       connected_broker = brokers.find do |_, host, broker|
-        @connect_lock.sleep(0)
-        if @connect_request == REQUEST_SHUTDOWN
-          @logger.info(
-            'Client shutdown in progress, aborting connect attempt'
-          )
-          @connect_state = NOT_CONNECTED if @connect_state == RECONNECTING
-          connect_error = SocketError.new(
-            'Failed to connect, client has been shutdown'
-          )
-          break
-        end
-        self.host = host
-        self.port = broker.port
-        begin
-          @last_ping_response = Time.now
-          @logger.debug("Connecting to broker: #{host}:#{broker.port}...")
-          mqtt_connect
-          @logger.info("Connected to broker: #{host}:#{broker.port}")
-          connect_error = nil
-          true
-        rescue StandardError => e
-          @logger.error(
-            "Failed to connect to #{host}:#{broker.port}: #{e.message}"
-          )
-          connect_error = e
-          false
-        end
+        connected, connect_error = connect_to_next_broker(host, broker.port)
+        break if @connect_request == REQUEST_SHUTDOWN
+        connected
       end
 
       self.current_broker = connected_broker ? connected_broker[2] : nil
       @connect_error = connect_error
 
-      if connected_broker
-        @connect_state = CONNECTED
-        @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
-        @connect_retry_delay = @config.reconnect_delay
-        @on_connect_callbacks.each do |callback|
-          begin
-            callback.call
-          rescue StandardError => e
-            @logger.exception(e,
-                              'Error raised by connect callback')
-          end
-        end
-      else
-        @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
-        @connect_error ||= SocketError.new('Unable to connect to any brokers')
+      connected_broker ? true : false
+    end
 
-        if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
-          @connect_request_tries_remaining = @config.connect_retries - 1
-        elsif @connect_request_tries_remaining > 0
-          @connect_request_tries_remaining -= 1
+    def connect_to_next_broker(host, port)
+      @connect_lock.sleep(0)
+      if @connect_request == REQUEST_SHUTDOWN
+        handle_shutdown_during_connect
+      else
+        begin
+          connect_to_broker(host, port)
+        rescue StandardError => e
+          handle_failed_broker_connection(host, port, e)
         end
+      end
+    end
+
+    def connect_to_broker(host, port)
+      self.host = host
+      self.port = port
+      @last_ping_response = Time.now
+      @logger.debug("Connecting to broker: #{host}:#{port}...")
+      mqtt_connect
+      @logger.info("Connected to broker: #{host}:#{port}")
+      [true, nil]
+    end
+
+    def handle_failed_broker_connection(host, port, exception)
+      @logger.error(
+        "Failed to connect to #{host}:#{port}: #{exception.message}"
+      )
+      [false, exception]
+    end
+
+    def handle_shutdown_during_connect
+      @logger.info('Client shutdown in progress, aborting connect attempt')
+      @connect_state = NOT_CONNECTED if @connect_state == RECONNECTING
+      [false, SocketError.new('Failed to connect, client has been shutdown')]
+    end
+
+    def handle_connected_to_broker
+      @connect_state = CONNECTED
+      @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
+      @connect_retry_delay = @config.reconnect_delay
+      @on_connect_callbacks.each do |callback|
+        begin
+          callback.call
+        rescue StandardError => e
+          @logger.exception(e, 'Error raised by connect callback')
+        end
+      end
+    end
+
+    def handle_failure_to_connect_to_any_brokers
+      @connect_state = NOT_CONNECTED unless @connect_state == RECONNECTING
+      @connect_error ||= SocketError.new('Unable to connect to any brokers')
+
+      if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
+        @connect_request_tries_remaining = @config.connect_retries - 1
+      elsif @connect_request_tries_remaining > 0
+        @connect_request_tries_remaining -= 1
       end
     end
 
@@ -371,18 +421,59 @@ module DXLClient
       @connect_state = UNKNOWN
     end
 
+    # @param mqtt_exception [MQTT::Exception]
+    def handle_connection_dropped(mqtt_exception)
+      self.current_broker = nil
+      if @connect_state == CONNECTED &&
+         ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
+           @connect_request
+         ) && @config.reconnect_when_disconnected
+        set_reconnect_state_for_dropped_connection(mqtt_exception)
+      else
+        send_error_for_dropped_connection(mqtt_exception)
+      end
+    end
+
+    def set_reconnect_state_for_dropped_connection(mqtt_exception)
+      @connect_state = RECONNECTING
+      @logger.errorf('Connection error: %s, retrying connection',
+                     mqtt_exception.message)
+    end
+
+    def send_error_for_dropped_connection(mqtt_exception)
+      @connect_state = NOT_CONNECTED unless @connect_state == SHUTDOWN
+      @connect_request = REQUEST_NONE if @connect_request == REQUEST_CONNECT
+      error = format('Connection error: %s, not retrying connection',
+                     mqtt_exception.message)
+      @logger.errorf(error)
+      @connect_error = SocketError.new(error)
+      @connect_response_condition.broadcast
+    end
+
+    def connect_thread_shutdown
+      do_disconnect
+    ensure
+      @connect_state = SHUTDOWN
+      @connect_request = REQUEST_NONE
+      @connect_response_condition.broadcast
+      @logger.debug('Connection thread terminating')
+    end
+
     def handle_packet(packet)
       if packet.class == MQTT::Packet::Publish
-        @on_publish_callbacks.each do |callback|
-          begin
-            callback.call(packet)
-          rescue StandardError => e
-            @logger.exception(e,
-                              'Error raised by publish callback')
-          end
-        end
+        deliver_publish_messages_to_callbacks(packet)
       else
         super(packet)
+      end
+    end
+
+    def deliver_publish_messages_to_callbacks(packet)
+      @on_publish_callbacks.each do |callback|
+        begin
+          callback.call(packet)
+        rescue StandardError => e
+          @logger.exception(e, 'Error raised by publish callback')
+        end
       end
     end
   end
