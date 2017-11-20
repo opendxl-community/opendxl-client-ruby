@@ -37,13 +37,7 @@ module DXLClient
       response_callback = nil
 
       @services_lock.synchronize do
-        response_callback = @requests[request_message_id]
-        if response_callback
-          @requests.delete(request_message_id)
-        else
-          @responses[request_message_id] = response
-          @services_ttl_condition.broadcast
-        end
+        response_callback = deliver_response(request_message_id, response)
       end
       response.invoke_callback(response_callback)
     end
@@ -52,7 +46,7 @@ module DXLClient
       register_request(request, nil)
       begin
         @client.send_request(request)
-        wait_for_response(request, timeout)
+        wait_for_matching_response(request, timeout)
       ensure
         unregister_request(request)
       end
@@ -70,6 +64,17 @@ module DXLClient
 
     private
 
+    def deliver_response(request_message_id, response)
+      @requests[request_message_id].tap do |response_callback|
+        if response_callback
+          @requests.delete(request_message_id)
+        else
+          @responses[request_message_id] = response
+          @services_ttl_condition.broadcast
+        end
+      end
+    end
+
     def register_request(request, response_callback)
       @services_lock.synchronize do
         @requests[request.message_id] = response_callback
@@ -83,23 +88,26 @@ module DXLClient
       end
     end
 
-    def wait_for_response(request, timeout)
+    def wait_for_matching_response(request, timeout)
       message_id = request.message_id
       @services_lock.synchronize do
         wait_start = Time.now
         until @responses.include?(message_id)
           now = Time.now
           wait_start = now if now < wait_start
-          wait_time_remaining = wait_start - now + timeout
-          if wait_time_remaining <= 0
-            raise Timeout::Error,
-                  "Timeout waiting for response to message: #{message_id}"
-          end
-          @services_ttl_condition.wait(@services_lock,
-                                       wait_time_remaining)
+          wait_for_next_response(wait_start, now, message_id, timeout)
         end
         @responses[message_id]
       end
+    end
+
+    def wait_for_next_response(wait_start, now, message_id, timeout)
+      wait_time_remaining = wait_start - now + timeout
+      if wait_time_remaining <= 0
+        raise Timeout::Error,
+              "Timeout waiting for response to message: #{message_id}"
+      end
+      @services_ttl_condition.wait(@services_lock, wait_time_remaining)
     end
   end
 
