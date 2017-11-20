@@ -172,8 +172,10 @@ module DXLClient
 
     # Named logger which uses Ruby's built-in logger to log messages.
     class StdlibNamedLogger < NamedLogger
-      # @param [StdlibRootLogger] stdlib_root_logger
-      # @param [Logger] logger
+      # @param name [String]
+      # @param level [Integer]
+      # @param stdlib_root_logger [StdlibRootLogger]
+      # @param logger [Logger]
       def initialize(name, level, stdlib_root_logger, logger)
         super(name, level)
         @logger = logger

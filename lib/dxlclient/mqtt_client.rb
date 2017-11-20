@@ -1,6 +1,7 @@
 require 'socket'
 require 'mqtt'
 require 'dxlclient/logger'
+require 'dxlclient/broker_connection_time'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -22,8 +23,6 @@ module DXLClient
     REQUEST_CONNECT = 1
     REQUEST_DISCONNECT = 2
     REQUEST_SHUTDOWN = 3
-
-    CHECK_CONNECTION_TIMEOUT = 1
 
     private_constant :MQTT_VERSION, :NOT_CONNECTED, :CONNECTED,
                      :REQUEST_DISCONNECT, :REQUEST_CONNECT, :REQUEST_NONE
@@ -66,7 +65,7 @@ module DXLClient
       @connect_retry_delay = @config.reconnect_delay
 
       @connect_thread = Thread.new do
-        Thread.current.name = 'DXLMQTTClientConnection'
+        Thread.current.name = 'DXLMQTTClient'
         connect_thread_run
       end
     end
@@ -207,123 +206,15 @@ module DXLClient
       @connect_retry_delay *= @config.reconnect_back_off_multiplier
     end
 
-    def get_broker_connection_time(host, port)
-      connect_successful = false
-      start = Time.now
-      addr_info = get_host_addr_info(host)
-
-      if addr_info
-        @logger.debug(
-          "Checking connection time for broker: #{host}:#{port}..."
-        )
-        connect_successful = can_connect_to_broker?(addr_info, host, port)
-      end
-
-      connect_successful ? Time.now - start : nil
-    end
-
-    def get_host_addr_info(host)
-      addr_info = nil
-      begin
-        addr_info = Socket.getaddrinfo(host, nil)
-      rescue SocketError => e
-        @logger.errorf('Failed to get info for broker host %s: %s',
-                       host, e.message)
-      end
-      addr_info
-    end
-
-    def can_connect_to_broker?(addr_info, host, port)
-      with_socket(addr_info, host, port) do |socket, sock_addr|
-        begin
-          socket.connect_nonblock(sock_addr)
-          true
-        rescue IO::WaitWritable, Errno::EAGAIN
-          can_connect_to_broker_within_timeout?(socket, sock_addr, host, port)
-        end
-      end
-    end
-
-    def with_socket(addr_info, host, port)
-      socket, sock_addr = create_socket(addr_info, host, port)
-      begin
-        yield(socket, sock_addr)
-      rescue Errno::ECONNREFUSED => e
-        @logger.errorf('Failed to connect to broker %s:%d: %s',
-                       host, port, e.message)
-        false
-      ensure
-        socket.close
-      end
-    end
-
-    def create_socket(addr_info, host, port)
-      socket = Socket.new(Socket.const_get(addr_info[0][0]),
-                          Socket::SOCK_STREAM, 0)
-      socket.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1)
-      sock_addr = Socket.pack_sockaddr_in(port, host)
-      [socket, sock_addr]
-    end
-
-    def can_connect_to_broker_within_timeout?(socket, sock_addr, host, port)
-      if IO.select(nil, [socket], nil, CHECK_CONNECTION_TIMEOUT)
-        broker_connected?(sock_addr)
-      else
-        @logger.errorf('Timed out trying to connect to broker %s:%d',
-                       host, port)
-        false
-      end
-    end
-
-    def broker_connected?(sock_addr)
-      socket.connect_nonblock(sock_addr)
-      true
-    rescue Errno::EISCONN
-      true
-    end
-
     def current_broker=(broker)
       @current_broker_lock.synchronize { @current_broker = broker }
     end
 
-    def brokers_by_connection_time
-      hosts_to_broker = @config.brokers.each_with_object({}) do |broker, acc|
-        broker.hosts.each { |host| acc["#{broker.port}:#{host}"] = broker }
-      end
-
-      broker_info_sorted_by_connection_time(
-        broker_connection_threads(hosts_to_broker).collect do |thread|
-          thread.join
-          thread.value
-        end
-      )
-    end
-
-    def broker_connection_threads(hosts_to_broker)
-      hosts_to_broker.collect do |port_host, broker|
-        host = port_host.split(':')[-1]
-        Thread.new do
-          Thread.current.name = "DXLMQTTClientHostCheck-#{host}"
-          [get_broker_connection_time(host, broker.port), host, broker]
-        end
-      end
-    end
-
-    def broker_info_sorted_by_connection_time(connection_times)
-      connection_times.sort do |a, b|
-        if a[0].nil?
-          1
-        elsif b[0].nil?
-          -1
-        else
-          a[0] <=> b[0]
-        end
-      end
-    end
-
     def do_connect
       @logger.info('Checking ability to connect to brokers...')
-      brokers = brokers_by_connection_time
+      brokers = BrokerConnectionTime.brokers_by_connection_time(
+        @config.brokers
+      )
 
       @logger.info('Trying to connect...')
       if connect_to_broker_from_list(brokers)
@@ -428,13 +319,13 @@ module DXLClient
          ![REQUEST_DISCONNECT, REQUEST_SHUTDOWN].include?(
            @connect_request
          ) && @config.reconnect_when_disconnected
-        set_reconnect_state_for_dropped_connection(mqtt_exception)
+        setup_reconnect_state_for_dropped_connection(mqtt_exception)
       else
         send_error_for_dropped_connection(mqtt_exception)
       end
     end
 
-    def set_reconnect_state_for_dropped_connection(mqtt_exception)
+    def setup_reconnect_state_for_dropped_connection(mqtt_exception)
       @connect_state = RECONNECTING
       @logger.errorf('Connection error: %s, retrying connection',
                      mqtt_exception.message)
