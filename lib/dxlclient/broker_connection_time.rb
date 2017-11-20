@@ -1,3 +1,7 @@
+require 'socket'
+require 'thread'
+require 'dxlclient/logger'
+
 # Module under which all of the DXL client functionality resides.
 module DXLClient
   # rubocop:disable ModuleLength,

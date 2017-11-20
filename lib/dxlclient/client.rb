@@ -2,6 +2,7 @@ require 'mqtt'
 require 'mqtt/client'
 
 require 'dxlclient/callback_manager'
+require 'dxlclient/connection_manager'
 require 'dxlclient/dxl_error'
 require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
@@ -23,6 +24,8 @@ module DXLClient
 
     private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT, :MQTT_QOS
 
+    # rubocop: disable AbcSize, MethodLength
+
     # @param config [DXLClient::Config]
     def initialize(config, &block)
       @logger = DXLClient::Logger.logger(self.class.name)
@@ -33,7 +36,7 @@ module DXLClient
       @subscription_lock = Mutex.new
 
       @mqtt_client = MQTTClient.new(config)
-
+      @connection_manager = ConnectionManager.new(config, @mqtt_client)
       @callback_manager = create_callback_manager(config)
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
@@ -42,8 +45,11 @@ module DXLClient
       handle_initialization_block(block)
     end
 
+    # rubocop: enable AbcSize, MethodLength
+
+    # Connect to a broker
     def connect
-      @mqtt_client.connect
+      @connection_manager.connect
     end
 
     def connected?
@@ -52,11 +58,11 @@ module DXLClient
 
     # @return [DXLClient::Broker]
     def current_broker
-      @mqtt_client.current_broker
+      @connection_manager.current_broker
     end
 
     def disconnect
-      @mqtt_client.disconnect
+      @connection_manager.disconnect
     end
 
     def register_service_sync(service_reg_info, timeout)
@@ -177,7 +183,7 @@ module DXLClient
       @service_manager.destroy
       @request_manager.destroy
       @callback_manager.destroy
-      @mqtt_client.destroy
+      @connection_manager.destroy
     rescue MQTT::NotConnectedException
       @logger.debug(
         'Unable to complete cleanup since MQTT client not connected'
@@ -204,8 +210,10 @@ module DXLClient
     end
 
     def initialize_mqtt_client
-      @mqtt_client.add_connect_callback(method(:on_connect))
-      @mqtt_client.add_connect_callback(@service_manager.method(:on_connect))
+      @connection_manager.add_connect_callback(method(:on_connect))
+      @connection_manager.add_connect_callback(
+        @service_manager.method(:on_connect)
+      )
       @mqtt_client.add_publish_callback(method(:on_message))
     end
 
