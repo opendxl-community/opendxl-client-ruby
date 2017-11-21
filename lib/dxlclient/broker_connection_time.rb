@@ -119,7 +119,7 @@ module DXLClient
         socket, sock_addr, host, port
       )
         if IO.select(nil, [socket], nil, CHECK_CONNECTION_TIMEOUT)
-          broker_connected?(sock_addr)
+          broker_connected?(socket, sock_addr)
         else
           logger.errorf('Timed out trying to connect to broker %s:%d',
                         host, port)
@@ -127,7 +127,7 @@ module DXLClient
         end
       end
 
-      def broker_connected?(sock_addr)
+      def broker_connected?(socket, sock_addr)
         socket.connect_nonblock(sock_addr)
         true
       rescue Errno::EISCONN

@@ -153,7 +153,11 @@ module DXLClient
     end
 
     def connect_to_next_broker(host, port)
-      @manager.connect_lock.sleep(0)
+      # Sleep briefly to allow a pending shutdown request to interrupt the
+      # connect request. Sleep currently needs to be greater than 0 to avoid an
+      # infinite sleep on JRuby.
+      # See https://github.com/jruby/jruby/issues/4862.
+      @manager.connect_lock.sleep(0.001)
       if @manager.connect_request == REQUEST_SHUTDOWN
         handle_shutdown_during_connect
       else
