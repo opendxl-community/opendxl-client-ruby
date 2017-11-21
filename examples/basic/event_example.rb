@@ -41,7 +41,7 @@ DXLClient::Client.new(config) do |client|
                                                 event_count_condition,
                                                 event_count_mutex))
 
-  start = Time.now()
+  start = Time.now
 
   TOTAL_EVENTS.times do |event_id|
     event = DXLClient::Message::Event.new(EVENT_TOPIC)
@@ -51,10 +51,10 @@ DXLClient::Client.new(config) do |client|
 
   puts('Waiting for events to be received...')
   event_count_mutex.synchronize do
-    while event_count[0] < TOTAL_EVENTS do
+    while event_count[0] < TOTAL_EVENTS
       event_count_condition.wait(event_count_mutex)
     end
   end
 
-  puts("Elapsed time (ms): #{(Time.now() - start) * 1000}")
+  puts("Elapsed time (ms): #{(Time.now - start) * 1000}")
 end

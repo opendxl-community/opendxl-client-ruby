@@ -16,28 +16,29 @@ begin
     logger.info('Event Publisher - Connecting to Broker')
     client.connect
 
-    while true
+    loop do
       puts('   Enter 1 to publish a DXL Event')
       puts('   Enter 9 to quit')
       print('   Enter value: ')
       input = gets.chomp
 
       case input
-        when '1'
-          logger.info(
-              "Event Publisher - Creating Event for Topic #{EVENT_TOPIC}")
-          event = DXLClient::Message::Event.new(EVENT_TOPIC)
-          event.payload = 'Sample Event Payload'
-          logger.info("Event Publisher - Publishing Event to #{EVENT_TOPIC}")
-          client.send_event(event)
-        when '9'
-          break
-        else
-          logger.info("Event Publisher - Invalid input: #{input}")
+      when '1'
+        logger.info(
+          "Event Publisher - Creating Event for Topic #{EVENT_TOPIC}"
+        )
+        event = DXLClient::Message::Event.new(EVENT_TOPIC)
+        event.payload = 'Sample Event Payload'
+        logger.info("Event Publisher - Publishing Event to #{EVENT_TOPIC}")
+        client.send_event(event)
+      when '9'
+        break
+      else
+        logger.info("Event Publisher - Invalid input: #{input}")
       end
     end
   end
-rescue => e
-  logger.exception(e,"Event Publisher - Exception")
+rescue StandardError => e
+  logger.exception(e, 'Event Publisher - Exception')
   exit(1)
 end

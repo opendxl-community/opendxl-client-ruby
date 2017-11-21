@@ -30,19 +30,16 @@ begin
     logger.info("Adding Event callback function to Topic: #{EVENT_TOPIC}")
     client.add_event_callback(EVENT_TOPIC, MySubscriberCallback.new(logger))
 
-    while true
+    loop do
       puts('   Enter 9 to quit')
       print('   Enter value: ')
       input = gets.chomp
 
-      loop
-        if input == '9'
-          break
-        logger.info("Event Subscriber - Invalid input: #{input}")
-      end
+      break if input == '9'
+      logger.info("Event Subscriber - Invalid input: #{input}")
     end
   end
-rescue => e
-  logger.exception(e,"Event Subscriber - Exception")
+rescue StandardError => e
+  logger.exception(e, 'Event Subscriber - Exception')
   exit(1)
 end

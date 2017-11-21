@@ -50,20 +50,20 @@ begin
                    MyProviderCallback.new(client, logger))
     client.register_service_sync(info, 10)
 
-    while true
+    loop do
       puts('   Enter 9 to quit')
       print('   Enter value: ')
       input = gets.chomp
 
       case input
-        when '9'
-          break
-        else
-          logger.info("Service Provider - Invalid input: #{input}")
+      when '9'
+        break
+      else
+        logger.info("Service Provider - Invalid input: #{input}")
       end
     end
   end
-rescue => e
+rescue StandardError => e
   logger.exception(e, 'Service Provider - Exception')
   exit(1)
 end

@@ -16,7 +16,7 @@ begin
     logger.info('Service Invoker - Connecting to Broker')
     client.connect
 
-    while true
+    loop do
       puts('   Enter 1 to send a Synchronous Event')
       puts('   Enter 2 to send an Asynchronous Event')
       puts('   Enter 9 to quit')
@@ -26,13 +26,15 @@ begin
       case input
       when '1'
         logger.info(
-          "Service Invoker - Creating Synchronous Request for topic #{SERVICE_TOPIC}")
+          "Service Invoker - Creating Synchronous Request for topic #{SERVICE_TOPIC}"
+        )
         request = DXLClient::Message::Request.new(SERVICE_TOPIC)
         request.payload =
-            "Sample Synchronous Request Payload - Request ID: #{request.message_id}"
+          "Sample Synchronous Request Payload - Request ID: #{request.message_id}"
 
         logger.info(
-            "Service Invoker - Sending Synchronous Request to #{SERVICE_TOPIC}")
+          "Service Invoker - Sending Synchronous Request to #{SERVICE_TOPIC}"
+        )
         response = client.sync_request(request)
 
         if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
@@ -42,32 +44,34 @@ begin
                        response.error_message)
         else
           logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
-                      'Synchronous Response received',
+                       'Synchronous Response received',
                        response.destination_topic,
                        response.payload)
         end
       when '2'
         logger.info(
-            "Service Invoker - Creating Asynchronous Request for topic #{SERVICE_TOPIC}")
+          "Service Invoker - Creating Asynchronous Request for topic #{SERVICE_TOPIC}"
+        )
         request = DXLClient::Message::Request.new(SERVICE_TOPIC)
         request.payload =
-            "Sample Asynchronous Request Payload - Request ID: #{request.message_id}"
+          "Sample Asynchronous Request Payload - Request ID: #{request.message_id}"
 
         logger.info(
-            "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}")
-        client.async_request(request) do |response|
-          if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+          "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}"
+        )
+        client.async_request(request) do |async_response|
+          if async_response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
             logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s",
                          'Service Invoker - Asynchronous Error Response received',
-                         response.destination_topic,
-                         response.request_message_id,
-                         response.error_message)
+                         async_response.destination_topic,
+                         async_response.request_message_id,
+                         async_response.error_message)
           else
             logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s",
                          'Service Invoker - Asynchronous Response received',
-                         response.destination_topic,
-                         response.request_message_id,
-                         response.payload)
+                         async_response.destination_topic,
+                         async_response.request_message_id,
+                         async_response.payload)
           end
         end
       when '9'
@@ -77,7 +81,7 @@ begin
       end
     end
   end
-rescue => e
-  logger.exception(e,"Service Invoker - Exception")
+rescue StandardError => e
+  logger.exception(e, 'Service Invoker - Exception')
   exit(1)
 end
