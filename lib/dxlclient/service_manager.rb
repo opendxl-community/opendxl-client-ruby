@@ -1,7 +1,7 @@
 require 'json'
 require 'set'
 
-require 'dxlclient/dxl_error'
+require 'dxlclient/error'
 require 'dxlclient/message/request'
 require 'dxlclient/service_worker'
 
@@ -65,7 +65,7 @@ module DXLClient
       request = @worker.register_service_request(service_reg_info)
       response = @client.sync_request(request, timeout)
       if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-        raise DXLClient::DXLError,
+        raise DXLClient::Error::DXLError,
               format('Error registering service %s. Code: %s.',
                      response.error_message, response.error_code)
       end
@@ -135,7 +135,7 @@ module DXLClient
         error = format('Error unregistering service %s: %s. Code: %s',
                        service_reg_info.service_type, response.error_message,
                        response.error_code)
-        raise DXLClient::DXLError, error
+        raise DXLClient::Error::DXLError, error
       end
       # rubocop: enable GuardClause
     end

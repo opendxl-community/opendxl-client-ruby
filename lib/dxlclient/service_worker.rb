@@ -1,7 +1,7 @@
 require 'json'
 require 'set'
 
-require 'dxlclient/dxl_error'
+require 'dxlclient/error'
 require 'dxlclient/message/request'
 
 # Module under which all of the DXL client functionality resides.

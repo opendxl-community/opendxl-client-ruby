@@ -1,6 +1,6 @@
 require 'msgpack'
 
-require 'dxlclient/dxl_error'
+require 'dxlclient/error'
 require 'dxlclient/message'
 require 'dxlclient/message/error_response'
 require 'dxlclient/message/event'
@@ -36,7 +36,7 @@ module DXLClient
 
       message_class = MESSAGE_TYPE_TO_CLASS[message_type]
       unless message_class
-        raise DXLClient::DXLError, "Unknown message type: #{message_type}"
+        raise DXLClient::Error::DXLError, "Unknown message type: #{message_type}"
       end
       create_message(message_class, unpacker, version)
     end

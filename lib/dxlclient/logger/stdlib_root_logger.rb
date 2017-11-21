@@ -1,3 +1,4 @@
+require 'dxlclient/error'
 require 'dxlclient/logger/root_logger'
 require 'dxlclient/logger/stdlib_named_logger'
 
@@ -39,7 +40,7 @@ module DXLClient
       def log_device=(log_device)
         @logger_lock.synchronize do
           if @logger
-            raise DXLClient::DXLError,
+            raise DXLClient::Error::DXLError,
                   'Log device cannot be set after logger created'
           end
           @log_device = log_device

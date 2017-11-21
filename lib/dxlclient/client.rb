@@ -3,7 +3,7 @@ require 'mqtt/client'
 
 require 'dxlclient/callback_manager'
 require 'dxlclient/connection_manager'
-require 'dxlclient/dxl_error'
+require 'dxlclient/error'
 require 'dxlclient/message/event'
 require 'dxlclient/message/request'
 require 'dxlclient/message/response'

@@ -1,7 +1,9 @@
 module DXLClient
-  class DXLError < StandardError
-  end
+  module Error
+    class DXLError < StandardError
+    end
 
-  class ShutdownError < DXLError
+    class ShutdownError < DXLError
+    end
   end
 end

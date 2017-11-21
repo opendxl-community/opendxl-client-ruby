@@ -1,5 +1,5 @@
 require 'dxlclient/callback_info'
-require 'dxlclient/dxl_error'
+require 'dxlclient/error'
 require 'dxlclient/logger'
 
 # Module under which all of the DXL client functionality resides.
@@ -20,7 +20,7 @@ module DXLClient
       raise ArgumentError, 'Block not given for task' unless block
       @destroy_lock.synchronize do
         unless @pool_alive
-          raise DXLClient::ShutdownError,
+          raise DXLClient::Error::ShutdownError,
                 format('Thread pool %s has already been destroyed, %s',
                        @thread_prefix, 'cannot add new task')
         end
