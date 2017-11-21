@@ -16,7 +16,7 @@ module DXLClient
       @client = client
 
       @reply_to_topic = reply_to_topic
-      @services_lock = Mutex.new
+      @requests_lock = Mutex.new
       @response_condition = ConditionVariable.new
       @requests = {}
       @responses = {}
@@ -34,12 +34,7 @@ module DXLClient
       @logger.debug(
         "Received response. Request message id: #{request_message_id}."
       )
-      response_callback = nil
-
-      @services_lock.synchronize do
-        response_callback = deliver_response(request_message_id, response)
-      end
-      response.invoke_callback(response_callback)
+      response.invoke_callback(process_response(request_message_id, response))
     end
 
     def sync_request(request, timeout)
@@ -64,25 +59,27 @@ module DXLClient
 
     private
 
-    def deliver_response(request_message_id, response)
-      @requests[request_message_id].tap do |response_callback|
-        if response_callback
-          @requests.delete(request_message_id)
-        else
-          @responses[request_message_id] = response
-          @response_condition.broadcast
+    def process_response(request_message_id, response)
+      @requests_lock.synchronize do
+        @requests[request_message_id].tap do |response_callback|
+          if response_callback
+            @requests.delete(request_message_id)
+          else
+            @responses[request_message_id] = response
+            @response_condition.broadcast
+          end
         end
       end
     end
 
     def register_request(request, response_callback)
-      @services_lock.synchronize do
+      @requests_lock.synchronize do
         @requests[request.message_id] = response_callback
       end
     end
 
     def unregister_request(request)
-      @services_lock.synchronize do
+      @requests_lock.synchronize do
         @requests.delete(request.message_id)
         @responses.delete(request.message_id)
       end
@@ -90,7 +87,7 @@ module DXLClient
 
     def wait_for_matching_response(request, timeout)
       message_id = request.message_id
-      @services_lock.synchronize do
+      @requests_lock.synchronize do
         wait_start = Time.now
         until @responses.include?(message_id)
           now = Time.now
@@ -107,7 +104,7 @@ module DXLClient
         raise Timeout::Error,
               "Timeout waiting for response to message: #{message_id}"
       end
-      @response_condition.wait(@services_lock, wait_time_remaining)
+      @response_condition.wait(@requests_lock, wait_time_remaining)
     end
   end
 
