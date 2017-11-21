@@ -1,6 +1,7 @@
 require 'iniparse'
 
 require 'dxlclient/broker'
+require 'dxlclient/uuid_generator'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -40,11 +41,11 @@ module DXLClient
     # rubocop: disable AbcSize, MethodLength
 
     # Constructor
-    def initialize(broker_ca_bundle: nil,
-                   cert_file: nil,
-                   private_key: nil,
-                   brokers: nil,
-                   config_file: nil)
+    def initialize(broker_ca_bundle = nil,
+                   cert_file = nil,
+                   private_key = nil,
+                   brokers = nil,
+                   config_file = nil)
       @config_model = config_model_from_file(config_file)
 
       @broker_ca_bundle = get_setting('Certs', 'BrokerCertChain',
@@ -52,7 +53,7 @@ module DXLClient
       @cert_file = get_setting('Certs', 'CertFile', cert_file)
       @private_key = get_setting('Certs', 'PrivateKey', private_key)
 
-      @brokers = brokers || brokers_from_config_section
+      @brokers = brokers || brokers_from_config_section || []
       @client_id = get_setting('General', 'ClientId', nil,
                                UUIDGenerator.generate_id_as_string)
 
@@ -72,7 +73,7 @@ module DXLClient
 
     # @return [DXLClient::Config]
     def self.create_dxl_config_from_file(config_file)
-      new(config_file: config_file)
+      new(nil, nil, nil, nil, config_file)
     end
 
     private
@@ -82,7 +83,7 @@ module DXLClient
     end
 
     def brokers_from_config_section
-      return unless @config_model['Brokers']
+      return unless @config_model && @config_model['Brokers']
       @config_model['Brokers'].lines.collect do |broker_option|
         if broker_option.is_a?(Array)
           raise ArgumentError,
