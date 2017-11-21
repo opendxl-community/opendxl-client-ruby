@@ -2,14 +2,14 @@ require 'set'
 require 'thread'
 require 'timeout'
 
-require 'dxlclient/response_callback'
+require 'dxlclient/callback/response_callback'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
   #  Manager that tracks outstanding requests and notifies the appropriate
   #  parties (invoking a response callback, notifying a waiting object, etc.)
   #  when a corresponding response is received.
-  class RequestManager < ResponseCallback
+  class RequestManager < DXLClient::Callback::ResponseCallback
     # @param client [DXLClient::Client]
     def initialize(client, reply_to_topic)
       @logger = DXLClient::Logger.logger(self.class.name)

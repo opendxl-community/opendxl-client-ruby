@@ -16,7 +16,7 @@ begin
     logger.info('Service Provider - Connecting to Broker')
     client.connect
 
-    class MyProviderCallback < DXLClient::RequestCallback
+    class MyProviderCallback < DXLClient::Callback::RequestCallback
       def initialize(client, logger)
         @client = client
         @logger = logger

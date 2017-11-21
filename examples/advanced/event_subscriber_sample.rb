@@ -16,7 +16,7 @@ begin
     logger.info('Event Subscriber - Connecting to Broker')
     client.connect
 
-    class MySubscriberCallback < DXLClient::EventCallback
+    class MySubscriberCallback < DXLClient::Callback::EventCallback
       def initialize(logger)
         @logger = logger
       end

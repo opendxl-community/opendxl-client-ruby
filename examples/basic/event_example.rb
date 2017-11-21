@@ -20,7 +20,7 @@ config.incoming_message_thread_pool_size = 10
 DXLClient::Client.new(config) do |client|
   client.connect
 
-  class MyEventCallback < DXLClient::EventCallback
+  class MyEventCallback < DXLClient::Callback::EventCallback
     def initialize(event_count, event_count_condition, event_count_mutex)
       @event_count = event_count
       @event_count_condition = event_count_condition

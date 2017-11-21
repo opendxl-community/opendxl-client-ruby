@@ -12,7 +12,7 @@ config = DXLClient::Config.create_dxl_config_from_file(CONFIG_FILE)
 DXLClient::Client.new(config) do |client|
   client.connect
 
-  class MyRequestCallback < DXLClient::RequestCallback
+  class MyRequestCallback < DXLClient::Callback::RequestCallback
     def initialize(client)
       @client = client
     end
