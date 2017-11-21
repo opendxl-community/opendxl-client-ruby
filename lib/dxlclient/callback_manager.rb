@@ -39,7 +39,7 @@ module DXLClient
       @client.unsubscribe(topic)
     end
 
-    # @param message [DXLClient::Message]
+    # @param message [DXLClient::Message::Message]
     def on_message(message)
       @logger.debugf('Received message. Type: %s. Id: %s.',
                      message.class.name, message.message_id)

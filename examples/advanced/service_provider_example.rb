@@ -33,7 +33,7 @@ begin
                       'Service Provider -',
                       request.message_id,
                       request.destination_topic)
-        response = DXLClient::Response.new(request)
+        response = DXLClient::Message::Response.new(request)
         response.payload = 'Sample Response Payload'
 
         @logger.infof('%s Sending Response for Request ID %s on %s',

@@ -26,7 +26,7 @@ begin
         when '1'
           logger.info(
               "Event Publisher - Creating Event for Topic #{EVENT_TOPIC}")
-          event = DXLClient::Event.new(EVENT_TOPIC)
+          event = DXLClient::Message::Event.new(EVENT_TOPIC)
           event.payload = 'Sample Event Payload'
           logger.info("Event Publisher - Publishing Event to #{EVENT_TOPIC}")
           client.send_event(event)

@@ -2,6 +2,7 @@ require 'json'
 require 'set'
 
 require 'dxlclient/dxl_error'
+require 'dxlclient/message/request'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -34,7 +35,7 @@ module DXLClient
 
     # @param service [DXLClient::ServiceRegistrationInfo]
     def register_service_request(service)
-      DXLClient::Request.new(
+      DXLClient::Message::Request.new(
         DXL_SERVICE_REGISTER_REQUEST_TOPIC
       ).tap do |request|
         request.payload = JSON.dump(serviceType: service.service_type,

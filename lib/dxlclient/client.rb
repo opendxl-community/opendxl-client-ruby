@@ -4,10 +4,12 @@ require 'mqtt/client'
 require 'dxlclient/callback_manager'
 require 'dxlclient/connection_manager'
 require 'dxlclient/dxl_error'
+require 'dxlclient/message/event'
+require 'dxlclient/message/request'
+require 'dxlclient/message/response'
 require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
 require 'dxlclient/request_manager'
-require 'dxlclient/response'
 require 'dxlclient/service_manager'
 require 'dxlclient/uuid_generator'
 
@@ -149,33 +151,33 @@ module DXLClient
     end
 
     def add_event_callback(topic, event_callback, subscribe_to_topic = true)
-      @callback_manager.add_callback(DXLClient::Event, topic,
+      @callback_manager.add_callback(DXLClient::Message::Event, topic,
                                      event_callback,
                                      subscribe_to_topic)
     end
 
     def remove_event_callback(topic, event_callback)
-      @callback_manager.remove_callback(DXLClient::Event, topic,
+      @callback_manager.remove_callback(DXLClient::Message::Event, topic,
                                         event_callback)
     end
 
     def add_request_callback(topic, request_callback)
-      @callback_manager.add_callback(DXLClient::Request, topic,
+      @callback_manager.add_callback(DXLClient::Message::Request, topic,
                                      request_callback)
     end
 
     def remove_request_callback(topic, request_callback)
-      @callback_manager.remove_callback(DXLClient::Request, topic,
+      @callback_manager.remove_callback(DXLClient::Message::Request, topic,
                                         request_callback)
     end
 
     def add_response_callback(topic, response_callback)
-      @callback_manager.add_callback(DXLClient::Response, topic,
+      @callback_manager.add_callback(DXLClient::Message::Response, topic,
                                      response_callback)
     end
 
     def remove_response_callback(topic, response_callback)
-      @callback_manager.remove_callback(DXLClient::Response, topic,
+      @callback_manager.remove_callback(DXLClient::Message::Response, topic,
                                         response_callback)
     end
 

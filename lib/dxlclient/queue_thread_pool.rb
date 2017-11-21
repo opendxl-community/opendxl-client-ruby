@@ -1,5 +1,6 @@
 require 'dxlclient/callback_info'
 require 'dxlclient/dxl_error'
+require 'dxlclient/logger'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient

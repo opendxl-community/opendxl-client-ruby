@@ -28,7 +28,7 @@ module DXLClient
       @client.remove_response_callback(@reply_to_topic, self)
     end
 
-    # @param response [DXLClient::Response]
+    # @param response [DXLClient::Message::Response]
     def on_response(response)
       request_message_id = response.request_message_id
       @logger.debug(

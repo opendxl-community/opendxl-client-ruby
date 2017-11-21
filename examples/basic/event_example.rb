@@ -44,7 +44,7 @@ DXLClient::Client.new(config) do |client|
   start = Time.now()
 
   TOTAL_EVENTS.times do |event_id|
-    event = DXLClient::Event.new(EVENT_TOPIC)
+    event = DXLClient::Message::Event.new(EVENT_TOPIC)
     event.payload = event_id.to_s
     client.send_event(event)
   end

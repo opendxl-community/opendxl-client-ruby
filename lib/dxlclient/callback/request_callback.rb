@@ -1,8 +1,8 @@
 # Module under which all of the DXL client functionality resides.
 module DXLClient
   module Callback
-    # Subclasses of this base class are used to receive {DXLClient::Request}
-    # messages.
+    # Subclasses of this base class are used to receive
+    # {DXLClient::Message::Request} messages.
     class RequestCallback
       def on_request(_request)
         raise NotImplementedError,

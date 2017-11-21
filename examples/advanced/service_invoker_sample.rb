@@ -24,56 +24,56 @@ begin
       input = gets.chomp
 
       case input
-        when '1'
-          logger.info(
-              "Service Invoker - Creating Synchronous Request for topic #{SERVICE_TOPIC}")
-          request = DXLClient::Request.new(SERVICE_TOPIC)
-          request.payload =
-              "Sample Synchronous Request Payload - Request ID: #{request.message_id}"
+      when '1'
+        logger.info(
+          "Service Invoker - Creating Synchronous Request for topic #{SERVICE_TOPIC}")
+        request = DXLClient::Message::Request.new(SERVICE_TOPIC)
+        request.payload =
+            "Sample Synchronous Request Payload - Request ID: #{request.message_id}"
 
-          logger.info(
-              "Service Invoker - Sending Synchronous Request to #{SERVICE_TOPIC}")
-          response = client.sync_request(request)
+        logger.info(
+            "Service Invoker - Sending Synchronous Request to #{SERVICE_TOPIC}")
+        response = client.sync_request(request)
 
+        if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+          logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
+                       'Synchronous Error Response received',
+                       response.destination_topic,
+                       response.error_message)
+        else
+          logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
+                      'Synchronous Response received',
+                       response.destination_topic,
+                       response.payload)
+        end
+      when '2'
+        logger.info(
+            "Service Invoker - Creating Asynchronous Request for topic #{SERVICE_TOPIC}")
+        request = DXLClient::Message::Request.new(SERVICE_TOPIC)
+        request.payload =
+            "Sample Asynchronous Request Payload - Request ID: #{request.message_id}"
+
+        logger.info(
+            "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}")
+        client.async_request(request) do |response|
           if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-            logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
-                         'Synchronous Error Response received',
+            logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s",
+                         'Service Invoker - Asynchronous Error Response received',
                          response.destination_topic,
+                         response.request_message_id,
                          response.error_message)
           else
-            logger.infof("Service Invoker - %s:\n   Topic: %s\n   Payload: %s",
-                        'Synchronous Response received',
+            logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s",
+                         'Service Invoker - Asynchronous Response received',
                          response.destination_topic,
+                         response.request_message_id,
                          response.payload)
           end
-        when '2'
-          logger.info(
-              "Service Invoker - Creating Asynchronous Request for topic #{SERVICE_TOPIC}")
-          request = DXLClient::Request.new(SERVICE_TOPIC)
-          request.payload =
-              "Sample Asynchronous Request Payload - Request ID: #{request.message_id}"
-
-          logger.info(
-              "Service Invoker - Sending Asynchronous Request to #{SERVICE_TOPIC}")
-          client.async_request(request) do |response|
-            if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-              logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Error: %s",
-                           'Service Invoker - Asynchronous Error Response received',
-                           response.destination_topic,
-                           response.request_message_id,
-                           response.error_message)
-            else
-              logger.infof("%s:\n   Topic: %s\n   Request ID: %s\n   Payload: %s",
-                           'Service Invoker - Asynchronous Response received',
-                           response.destination_topic,
-                           response.request_message_id,
-                           response.payload)
-            end
-          end
-        when '9'
-          break
-        else
-          logger.info("Service Invoker - Invalid input: #{input}")
+        end
+      when '9'
+        break
+      else
+        logger.info("Service Invoker - Invalid input: #{input}")
       end
     end
   end

@@ -19,7 +19,7 @@ DXLClient::Client.new(config) do |client|
 
     def on_request(request)
       puts("Service received request payload: #{request.payload}")
-      response = DXLClient::Response.new(request)
+      response = DXLClient::Message::Response.new(request)
       response.payload = 'pong'
       @client.send_response(response)
     end
@@ -29,7 +29,7 @@ DXLClient::Client.new(config) do |client|
   info.add_topic(SERVICE_TOPIC, MyRequestCallback.new(client))
   client.register_service_sync(info, 10)
 
-  request = DXLClient::Request.new(SERVICE_TOPIC)
+  request = DXLClient::Message::Request.new(SERVICE_TOPIC)
   request.payload = 'ping'
   response = client.sync_request(request)
   if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR

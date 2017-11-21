@@ -2,6 +2,7 @@ require 'json'
 require 'set'
 
 require 'dxlclient/dxl_error'
+require 'dxlclient/message/request'
 require 'dxlclient/service_worker'
 
 # Module under which all of the DXL client functionality resides.
@@ -141,7 +142,9 @@ module DXLClient
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def unregister_service_request(service_reg_info)
-      request = DXLClient::Request.new(DXL_SERVICE_UNREGISTER_REQUEST_TOPIC)
+      request = DXLClient::Message::Request.new(
+        DXL_SERVICE_UNREGISTER_REQUEST_TOPIC
+      )
       request.payload = JSON.dump(serviceGuid: service_reg_info.service_id)
       request
     end
