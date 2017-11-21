@@ -37,7 +37,7 @@ module DXLClient
       @worker = ConnectionWorker.new(self, mqtt_client, @config)
 
       @connect_thread = Thread.new do
-        Thread.current.name = 'DXLConnectionManager'
+        Thread.current.name = 'DXLConnectionWorker'
         @logger.debug('Connection thread started')
         @worker.run
       end

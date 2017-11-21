@@ -17,7 +17,7 @@ module DXLClient
 
       @reply_to_topic = reply_to_topic
       @services_lock = Mutex.new
-      @services_ttl_condition = ConditionVariable.new
+      @response_condition = ConditionVariable.new
       @requests = {}
       @responses = {}
 
@@ -70,7 +70,7 @@ module DXLClient
           @requests.delete(request_message_id)
         else
           @responses[request_message_id] = response
-          @services_ttl_condition.broadcast
+          @response_condition.broadcast
         end
       end
     end
@@ -107,7 +107,7 @@ module DXLClient
         raise Timeout::Error,
               "Timeout waiting for response to message: #{message_id}"
       end
-      @services_ttl_condition.wait(@services_lock, wait_time_remaining)
+      @response_condition.wait(@services_lock, wait_time_remaining)
     end
   end
 
