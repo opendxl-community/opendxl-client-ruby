@@ -1,0 +1,15 @@
+sudo: false
+
+language: ruby
+
+services:
+  - docker
+
+before_install:
+  - docker pull opendxl/opendxl-broker
+  - docker run -d -p 127.0.0.1:8883:8883 --volume "$PWD/dxlbroker-volume:/dxlbroker-volume" opendxl/opendxl-broker
+  - docker ps -a
+  - cp spec/integration/client_config.cfg.travis spec/integration/client_config.cfg
+
+script:
+  - bundle exec rspec spec

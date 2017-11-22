@@ -4,4 +4,5 @@ vendor
 examples/dxlclient.config
 .yardoc
 doc
-client_config.cfg.local
+spec/integration/client_config.cfg
+dxlbroker-volume

@@ -12,7 +12,7 @@ DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'sync requests', :integration do
   it 'receive a response for every concurrent request made' do
-    ClientHelpers.with_integration_client do |client|
+    ClientHelpers.with_integration_client(0) do |client|
       test_service = TestService.new(client)
       client.connect
       topic = 'event_testing'
