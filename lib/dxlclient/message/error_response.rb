@@ -10,14 +10,20 @@ module DXLClient
     class ErrorResponse < DXLClient::Message::Response
       attr_reader :error_code, :error_message
 
-      def initialize(error_code = 0, error_message = '')
-        super()
+      def initialize(request = nil, error_code = 0, error_message = '')
+        super(request)
         @error_code = error_code
         @error_message = error_message
         @message_type = DXLClient::Message::MESSAGE_TYPE_ERROR
       end
 
       private
+
+      def pack_message_v0(packer)
+        super(packer)
+        packer.write(@error_code)
+        packer.write(@error_message)
+      end
 
       def unpack_message_v0(unpacker)
         super(unpacker)

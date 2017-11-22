@@ -4,3 +4,4 @@ vendor
 examples/dxlclient.config
 .yardoc
 doc
+client_config.cfg.local
