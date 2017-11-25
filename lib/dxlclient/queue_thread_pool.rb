@@ -50,13 +50,14 @@ module DXLClient
     end
 
     def thread_run(thread_id)
-      Thread.current.name = "#{@thread_prefix}-#{thread_id}"
-      @logger.debugf('Starting thread: %s', Thread.current.name)
+      thread_name = "#{@thread_prefix}-#{thread_id}"
+      DXLClient::Util.current_thread_name(thread_name)
+      @logger.debugf('Starting thread: %s', thread_name)
       begin
         process_tasks_until_done
       ensure
         @task_queue.push(:done)
-        @logger.debugf('Ending thread: %s', Thread.current.name)
+        @logger.debugf('Ending thread: %s', thread_name)
       end
     end
 

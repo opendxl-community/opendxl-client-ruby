@@ -1,6 +1,6 @@
 require 'msgpack'
 
-require 'dxlclient/uuid_generator'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -29,7 +29,7 @@ module DXLClient
         # Version 0 fields
         @version = DEFAULT_MESSAGE_VERSION
         @message_type = nil
-        @message_id = UUIDGenerator.generate_id_as_string
+        @message_id = Util.generate_id_as_string
 
         @source_client_id = ''
         @source_broker_id = ''

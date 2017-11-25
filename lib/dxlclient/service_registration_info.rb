@@ -17,12 +17,16 @@ module DXLClient
       @callbacks_by_topic = {}
       @destination_tenant_guids = []
       @metadata = {}
-      @service_id = UUIDGenerator.generate_id_as_string
+      @service_id = Util.generate_id_as_string
       @ttl = DEFAULT_TTL
       @last_registration = nil
     end
 
-    def add_topic(topic, callback)
+    def add_topic(topic, callback = nil, &block)
+      if callback && block_given?
+        raise ArgumentError, 'Cannot specify callback and block'
+      end
+      callback = block if block_given?
       callbacks = @callbacks_by_topic[topic]
       unless callbacks
         callbacks = Set.new

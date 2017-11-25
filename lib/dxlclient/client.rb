@@ -11,7 +11,7 @@ require 'dxlclient/message_encoder'
 require 'dxlclient/mqtt_client'
 require 'dxlclient/request_manager'
 require 'dxlclient/service_manager'
-require 'dxlclient/uuid_generator'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -38,7 +38,9 @@ module DXLClient
       @subscription_lock = Mutex.new
 
       @mqtt_client = MQTTClient.new(config)
-      @connection_manager = ConnectionManager.new(config, @mqtt_client)
+      @connection_manager = ConnectionManager.new(config,
+                                                  @mqtt_client,
+                                                  object_id)
       @callback_manager = create_callback_manager(config)
       @request_manager = RequestManager.new(self, @reply_to_topic)
       @service_manager = ServiceManager.new(self)
@@ -138,21 +140,19 @@ module DXLClient
     end
 
     def async_request(request, response_callback = nil, &block)
-      if response_callback && block_given?
-        raise ArgumentError,
-              'Only a callback or block (but not both) may be specified'
-      end
-      callback = block_given? ? block : response_callback
-      @request_manager.async_request(request, callback)
+      @request_manager.async_request(
+        request, callback_or_block(response_callback, block, true)
+      )
     end
 
     def sync_request(request, timeout = DEFAULT_REQUEST_TIMEOUT)
       @request_manager.sync_request(request, timeout)
     end
 
-    def add_event_callback(topic, event_callback, subscribe_to_topic = true)
+    def add_event_callback(topic, event_callback = nil,
+                           subscribe_to_topic = true, &block)
       @callback_manager.add_callback(DXLClient::Message::Event, topic,
-                                     event_callback,
+                                     callback_or_block(event_callback, block),
                                      subscribe_to_topic)
     end
 
@@ -161,9 +161,13 @@ module DXLClient
                                         event_callback)
     end
 
-    def add_request_callback(topic, request_callback)
-      @callback_manager.add_callback(DXLClient::Message::Request, topic,
-                                     request_callback)
+    def add_request_callback(topic, request_callback = nil,
+                             subscribe_to_topic = false, &block)
+      @callback_manager.add_callback(
+        DXLClient::Message::Request, topic,
+        callback_or_block(request_callback, block),
+        subscribe_to_topic
+      )
     end
 
     def remove_request_callback(topic, request_callback)
@@ -171,9 +175,13 @@ module DXLClient
                                         request_callback)
     end
 
-    def add_response_callback(topic, response_callback)
-      @callback_manager.add_callback(DXLClient::Message::Response, topic,
-                                     response_callback)
+    def add_response_callback(topic, response_callback = nil,
+                              subscribe_to_topic = false, &block)
+      @callback_manager.add_callback(
+        DXLClient::Message::Response, topic,
+        callback_or_block(response_callback, block),
+        subscribe_to_topic
+      )
     end
 
     def remove_response_callback(topic, response_callback)
@@ -184,8 +192,8 @@ module DXLClient
     def destroy
       @service_manager.destroy
       @request_manager.destroy
-      @callback_manager.destroy
       @connection_manager.destroy
+      @callback_manager.destroy
     rescue MQTT::NotConnectedException
       @logger.debug(
         'Unable to complete cleanup since MQTT client not connected'
@@ -193,6 +201,17 @@ module DXLClient
     end
 
     private
+
+    def callback_or_block(callback, block, allow_nil_for_both = false)
+      if callback
+        raise ArgumentError, 'Cannot specify callback and block' if block
+        callback
+      elsif block
+        block
+      elsif !allow_nil_for_both
+        raise ArgumentError, 'Either a callback or block must be specified'
+      end
+    end
 
     def create_callback_manager(config)
       CallbackManager.new(

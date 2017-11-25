@@ -21,7 +21,7 @@ module DXLClient
       @requests = {}
       @responses = {}
 
-      @client.add_response_callback(reply_to_topic, self)
+      @client.add_response_callback(reply_to_topic, self, true)
     end
 
     def destroy

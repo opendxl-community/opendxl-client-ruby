@@ -2,6 +2,7 @@ require 'socket'
 require 'thread'
 require 'dxlclient/connection_worker'
 require 'dxlclient/logger'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -18,10 +19,11 @@ module DXLClient
 
     # @param config [DXLClient::Config]
     # @param mqtt_client [MQTT::Client]
-    def initialize(config, mqtt_client)
+    def initialize(config, mqtt_client, client_object_id)
       @logger = DXLClient::Logger.logger(self.class.name)
       @config = config
       @mqtt_client = mqtt_client
+      @client_object_id = client_object_id
 
       if config.brokers.nil? || config.brokers.empty?
         raise ArgumentError, 'No brokers in configuration so cannot connect'
@@ -34,10 +36,13 @@ module DXLClient
       @connect_state = ConnectionWorker::NOT_CONNECTED
       @connect_request = ConnectionWorker::REQUEST_NONE
 
-      @worker = ConnectionWorker.new(self, mqtt_client, @config)
+      @worker = ConnectionWorker.new(self, mqtt_client, @config,
+                                     client_object_id)
 
       @connect_thread = Thread.new do
-        Thread.current.name = 'DXLConnectionWorker'
+        DXLClient::Util.current_thread_name(
+          "DXLConnectionWorker-#{client_object_id}"
+        )
         @logger.debug('Connection thread started')
         @worker.run
       end

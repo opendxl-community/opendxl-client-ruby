@@ -4,6 +4,7 @@ require 'set'
 require 'dxlclient/error'
 require 'dxlclient/message/request'
 require 'dxlclient/service_worker'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -102,7 +103,9 @@ module DXLClient
 
     def create_worker_thread
       Thread.new do
-        Thread.current.name = 'DXLServiceWorker'
+        DXLClient::Util.current_thread_name(
+          "DXLServiceWorker-#{@client.object_id}"
+        )
         @logger.debug('Services ttl monitor thread started')
         @worker.run
         @logger.debug('Services ttl monitor thread terminating')
@@ -113,7 +116,7 @@ module DXLClient
     def add_service_callbacks(service_reg_info)
       service_reg_info.topics.each do |topic|
         service_reg_info.callbacks(topic).each do |callback|
-          @client.add_request_callback(topic, callback)
+          @client.add_request_callback(topic, callback, true)
         end
       end
     end

@@ -16,13 +16,14 @@ module DXLClient
     private_constant :CHECK_CONNECTION_TIMEOUT
 
     class << self
-      def brokers_by_connection_time(brokers)
+      def brokers_by_connection_time(brokers, thread_context_id)
         hosts_to_broker = brokers.each_with_object({}) do |broker, acc|
           broker.hosts.each { |host| acc["#{broker.port}:#{host}"] = broker }
         end
 
         broker_info_sorted_by_connection_time(
-          broker_connection_threads(hosts_to_broker).collect do |thread|
+          broker_connection_threads(hosts_to_broker,
+                                    thread_context_id).collect do |thread|
             thread.join
             thread.value
           end
@@ -35,11 +36,13 @@ module DXLClient
 
       private
 
-      def broker_connection_threads(hosts_to_broker)
+      def broker_connection_threads(hosts_to_broker, thread_context_id)
         hosts_to_broker.collect do |port_host, broker|
           host = port_host.split(':')[-1]
           Thread.new do
-            Thread.current.name = "DXLBrokerConnectionTime-#{host}"
+            DXLClient::Util.current_thread_name(
+              "DXLBrokerConnectionTime-#{thread_context_id}-#{host}"
+            )
             [get_broker_connection_time(host, broker.port), host, broker]
           end
         end

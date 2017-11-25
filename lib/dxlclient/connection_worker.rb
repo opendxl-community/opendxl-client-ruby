@@ -25,11 +25,12 @@ module DXLClient
     # @param connection_manager [DXLClient::ConnectionManager]
     # @param mqtt_client [MQTT::Client]
     # @param config [DXLClient::Config]
-    def initialize(connection_manager, mqtt_client, config)
+    def initialize(connection_manager, mqtt_client, config, client_object_id)
       @logger = DXLClient::Logger.logger(self.class.name)
       @manager = connection_manager
       @mqtt_client = mqtt_client
       @config = config
+      @client_object_id = client_object_id
 
       @current_broker = nil
       @current_broker_lock = Mutex.new
@@ -126,7 +127,7 @@ module DXLClient
     def do_connect
       @logger.info('Checking ability to connect to brokers...')
       brokers = BrokerConnectionTime.brokers_by_connection_time(
-        @config.brokers
+        @config.brokers, @client_object_id
       )
 
       @logger.info('Trying to connect...')

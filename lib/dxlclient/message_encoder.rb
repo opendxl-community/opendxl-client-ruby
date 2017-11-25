@@ -7,7 +7,7 @@ require 'dxlclient/message/event'
 require 'dxlclient/message/message'
 require 'dxlclient/message/request'
 require 'dxlclient/message/response'
-require 'dxlclient/uuid_generator'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -36,7 +36,8 @@ module DXLClient
 
       message_class = MESSAGE_TYPE_TO_CLASS[message_type]
       unless message_class
-        raise DXLClient::Error::DXLError, "Unknown message type: #{message_type}"
+        raise DXLClient::Error::DXLError,
+              "Unknown message type: #{message_type}"
       end
       create_message(message_class, unpacker, version)
     end

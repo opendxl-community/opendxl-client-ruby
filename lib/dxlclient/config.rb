@@ -1,7 +1,7 @@
 require 'iniparse'
 
 require 'dxlclient/broker'
-require 'dxlclient/uuid_generator'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -55,7 +55,7 @@ module DXLClient
 
       @brokers = brokers || brokers_from_config_section || []
       @client_id = get_setting('General', 'ClientId', nil,
-                               UUIDGenerator.generate_id_as_string)
+                               Util.generate_id_as_string)
 
       @incoming_message_queue_size = DEFAULT_INCOMING_MESSAGE_QUEUE_SIZE
       @incoming_message_thread_pool_size =

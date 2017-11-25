@@ -1,3 +1,4 @@
+require 'dxlclient/config'
 require 'dxlclient/error'
 
 module ClientHelpers
