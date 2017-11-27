@@ -13,13 +13,13 @@ describe 'a flood of async requests', :integration do
   it 'receive a response for every request made' do
     request_count = 1000
     max_wait = 90
-    topic = "async_flood_sync_service_#{SecureRandom.uuid}"
+    topic = "async_flood_sync_#{SecureRandom.uuid}"
     error_count = 0
     response_count = 0
 
     ClientHelpers.with_integration_client do |client|
       reg_info = DXLClient::ServiceRegistrationInfo.new(
-        client, 'sync_request_runner_service'
+        client, 'async_flood_sync_service'
       )
       client.connect
 
@@ -68,7 +68,7 @@ describe 'a flood of async requests', :integration do
           while response_count < request_count && error_count.zero? &&
                 wait_remaining > 0
             response_condition.wait(response_mutex, wait_remaining)
-            wait_remaining = Time.now - start + max_wait
+            wait_remaining = start - Time.now + max_wait
           end
 
           # Terminate the client connections to end the test early if

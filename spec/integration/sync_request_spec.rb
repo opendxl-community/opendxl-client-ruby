@@ -33,7 +33,7 @@ describe 'sync requests', :integration do
 
       start = Time.now
       responses = request_threads.collect do |thread|
-        wait_remaining = Time.now - start + max_wait
+        wait_remaining = start - Time.now + max_wait
         break if thread.join(wait_remaining).nil?
         thread.value
       end
