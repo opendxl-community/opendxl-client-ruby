@@ -103,6 +103,7 @@ module DXLClient
                       MessageEncoder.new.to_bytes(response))
     end
 
+    # @return [Set]
     def subscriptions
       @subscription_lock.synchronize do
         @subscriptions.clone

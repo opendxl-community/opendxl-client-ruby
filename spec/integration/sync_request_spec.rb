@@ -10,8 +10,8 @@ DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'sync requests', :integration do
   it 'receive a response for every concurrent request made' do
-    max_wait = 10
-    request_count = 100
+    max_wait = 300
+    request_count = 500
     ClientHelpers.with_integration_client(0) do |client|
       test_service = TestService.new(client)
       client.connect
@@ -34,11 +34,16 @@ describe 'sync requests', :integration do
       start = Time.now
       responses = request_threads.collect do |thread|
         wait_remaining = start - Time.now + max_wait
-        break if thread.join(wait_remaining).nil?
+        if thread.join(wait_remaining).nil?
+          # Terminate the client connection and request threads to end the test
+          # quickly if not all responses were received before the timeout was
+          # reached
+          client.disconnect
+          request_threads.each(&:kill)
+          break
+        end
         thread.value
       end
-
-      request_threads.each { |thread| thread.kill if thread.alive? }
 
       expect(responses).not_to be_nil, 'Timed out waiting for responses'
       expect(responses.count).to eql(request_count)
