@@ -64,14 +64,13 @@ describe 'a flood of async requests', :integration do
           break unless current_error_count.zero?
         end
 
-        start = Time.now
         response_mutex.synchronize do
-          wait_remaining = max_wait
-          while response_count < request_count && error_count.zero? &&
-                wait_remaining > 0
+          ClientHelpers.while_not_done_and_time_remaining(
+            -> { response_count < request_count && error_count.zero? },
+            max_wait
+          ) do |wait_remaining|
             all_responses_received_condition.wait(response_mutex,
                                                   wait_remaining)
-            wait_remaining = start - Time.now + max_wait
           end
 
           # Terminate the client connections to end the test quickly if

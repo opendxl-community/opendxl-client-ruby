@@ -38,12 +38,11 @@ describe 'event callbacks', :integration do
         client.send_event(event)
       end
 
-      start = Time.now
       event_mutex.synchronize do
-        wait_remaining = max_wait
-        while receive_count < send_count && wait_remaining > 0
+        ClientHelpers.while_not_done_and_time_remaining(
+          -> { receive_count < send_count }, max_wait
+        ) do |wait_remaining|
           all_events_received_condition.wait(event_mutex, wait_remaining)
-          wait_remaining = start - Time.now + max_wait
         end
 
         expect(receive_count).to eql(send_count)

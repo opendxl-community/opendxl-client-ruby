@@ -37,4 +37,20 @@ module ClientHelpers
       DXLClient::Client.new(config)
     end
   end
+
+  def self.while_not_done_and_time_remaining(
+    continue_proc, max_wait, start = Time.now
+  )
+    raise 'No block provided' unless block_given?
+    wait_remaining = start - Time.now + max_wait
+
+    continue = continue_proc.call
+    while continue && wait_remaining > 0
+      yield(wait_remaining)
+      wait_remaining = start - Time.now + max_wait
+      continue = continue_proc.call
+    end
+
+    !continue
+  end
 end

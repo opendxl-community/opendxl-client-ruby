@@ -77,29 +77,27 @@ describe DXLClient::Client do
             if threads_receiving_callbacks.size == thread_count
               all_callback_threads_exercised_condition.broadcast
             else
-              wait_remaining = start - Time.now + max_wait
-              while threads_receiving_callbacks.size < thread_count &&
-                    wait_remaining > 0
+              ClientHelpers.while_not_done_and_time_remaining(
+                -> { threads_receiving_callbacks.size < thread_count },
+                max_wait,
+                start
+              ) do |wait_remaining|
                 all_callback_threads_exercised_condition.wait(
                   event_mutex, wait_remaining
                 )
-                wait_remaining = start - Time.now + max_wait
               end
             end
           end
         end
       end
 
-      wait_remaining = max_wait
       event_mutex.synchronize do
-        while threads_receiving_callbacks.size < thread_count &&
-              wait_remaining > 0
+        ClientHelpers.while_not_done_and_time_remaining(
+          -> { threads_receiving_callbacks.size < thread_count }, max_wait
+        ) do |wait_remaining|
           event = DXLClient::Message::Event.new(topic)
           client.send_event(event)
-          if threads_receiving_callbacks.size < thread_count
-            new_callback_thread_condition.wait(event_mutex, wait_remaining)
-          end
-          wait_remaining = start - Time.now + max_wait
+          new_callback_thread_condition.wait(event_mutex, wait_remaining)
         end
 
         # Terminate the client connection to end the test quickly if not

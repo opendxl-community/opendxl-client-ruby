@@ -58,13 +58,11 @@ describe 'async requests', :integration do
         client.async_request(request, response_callback)
       end
 
-      start = Time.now
       response_mutex.synchronize do
-        wait_remaining = max_wait
-        while total_response_count < expected_response_count &&
-              wait_remaining > 0
+        ClientHelpers.while_not_done_and_time_remaining(
+          -> { total_response_count < expected_response_count }, max_wait
+        ) do |wait_remaining|
           all_responses_received_condition.wait(response_mutex, wait_remaining)
-          wait_remaining = start - Time.now + max_wait
         end
 
         expect(total_response_count).to eql(expected_response_count)
