@@ -8,7 +8,7 @@ require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ClassLength
+  # rubocop: disable ClassLength
 
   # Manager which handles service registrations with the DXL fabric.
   class ServiceManager

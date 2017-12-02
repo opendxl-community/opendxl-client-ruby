@@ -1,5 +1,6 @@
 require 'dxlclient/config'
 require 'dxlclient/error'
+require 'dxlclient/logger'
 
 module ClientHelpers
   DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE = 1
@@ -8,7 +9,7 @@ module ClientHelpers
   RESPONSE_WAIT = 60
   CLIENT_CONFIG_FILE = 'client_config.cfg'.freeze
 
-  def self.client_config
+  def self.client_config_file
     config_dirs = [Dir.home, File.dirname(__FILE__)]
     config = config_dirs.find do |config_dir|
       File.exist?(File.join(config_dir, CLIENT_CONFIG_FILE))
@@ -21,16 +22,27 @@ module ClientHelpers
     File.join(config, CLIENT_CONFIG_FILE)
   end
 
+  # @return [DXLClient::Config]
+  def self.client_config(
+    max_retries = nil,
+    incoming_message_thread_pool_size = nil
+  )
+    DXLClient::Config.create_dxl_config_from_file(
+      client_config_file
+    ).tap do |config|
+      config.connect_retries = max_retries || DEFAULT_RETRIES
+      config.incoming_message_thread_pool_size = \
+        incoming_message_thread_pool_size ||
+        DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE
+    end
+  end
+
   def self.with_integration_client(
-    max_retries = DEFAULT_RETRIES,
-    incoming_message_thread_pool_size = \
-      DEFAULT_INCOMING_MESSAGE_THREAD_POOL_SIZE,
+    max_retries = nil,
+    incoming_message_thread_pool_size = nil,
     &block
   )
-    config = DXLClient::Config.create_dxl_config_from_file(client_config)
-    config.incoming_message_thread_pool_size = \
-      incoming_message_thread_pool_size
-    config.connect_retries = max_retries
+    config ||= client_config(max_retries, incoming_message_thread_pool_size)
     if block_given?
       DXLClient::Client.new(config) { |client| block.call(client) }
     else
@@ -52,5 +64,26 @@ module ClientHelpers
     end
 
     !continue
+  end
+
+  def self.with_logged_messages_captured
+    raise 'No block provided' unless block_given?
+    logged_messages = StringIO.new
+    enable_capture_logging(logged_messages)
+    yield(logged_messages)
+    logged_messages
+  ensure
+    disable_capture_logging
+  end
+
+  def self.enable_capture_logging(log_device)
+    root_logger = DXLClient::Logger.root_logger
+    root_logger.log_device = log_device
+    loggers = root_logger.loggers
+    loggers.each_value { |logger| logger.reopen(log_device) }
+  end
+
+  def self.disable_capture_logging
+    enable_capture_logging(STDOUT)
   end
 end

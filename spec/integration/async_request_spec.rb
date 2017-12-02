@@ -9,7 +9,7 @@ require 'integration/test_service'
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'async requests', :integration do
-  it 'receive a response for every request made' do
+  it 'should receive a response for every request made' do
     request_count = 100
     expected_response_count = request_count * 3
     max_wait = 60

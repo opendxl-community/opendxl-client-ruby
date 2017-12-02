@@ -3,7 +3,13 @@ module DXLClient
     class DXLError < StandardError
     end
 
-    class ShutdownError < DXLError
+    class IOError < DXLError
+    end
+
+    class NotConnectedError < IOError
+    end
+
+    class WaitTimeoutError < IOError
     end
   end
 end

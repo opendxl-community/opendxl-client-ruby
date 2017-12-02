@@ -7,7 +7,7 @@ require 'json'
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'broker registry query', :integration do
-  it 'returns a proper response' do
+  it 'should return a proper response' do
     ClientHelpers.with_integration_client(0) do |client|
       client.connect
 

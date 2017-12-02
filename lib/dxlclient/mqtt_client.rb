@@ -1,5 +1,4 @@
 require 'mqtt'
-require 'dxlclient/logger'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -7,38 +6,17 @@ module DXLClient
   # handling for DXL - for example, dispatching callbacks for message publish
   # events.
   class MQTTClient < MQTT::Client
-    MQTT_VERSION = '3.1.1'.freeze
-
-    private_constant :MQTT_VERSION
-
     alias mqtt_connect connect
 
-    # rubocop: disable MethodLength
-
-    # @param config [DXLClient::Config]
-    def initialize(config)
-      @config = config
-      @logger = DXLClient::Logger.logger(self.class.name)
-
-      super(client_id: config.client_id,
-            version: MQTT_VERSION,
-            clean_session: true,
-            ssl: true,
-            keep_alive: config.keep_alive_interval)
-      self.cert_file = config.cert_file
-      self.key_file = config.private_key
-      self.ca_file = config.broker_ca_bundle
-
-      @publish_lock = Mutex.new
-      @on_publish_callbacks = Set.new
+    def initialize(*)
+      @on_message_lock = Mutex.new
+      @on_message = nil
+      super
     end
-    # rubocop: enable MethodLength
 
     # Register a callback to be invoked with the content of a published message
-    def add_publish_callback(callback)
-      @publish_lock.synchronize do
-        @on_publish_callbacks.add(callback)
-      end
+    def on_message(callback)
+      @on_message_lock.synchronize { @on_message = callback }
     end
 
     def connect
@@ -54,21 +32,11 @@ module DXLClient
 
     def handle_packet(packet)
       if packet.class == MQTT::Packet::Publish
-        deliver_publish_messages_to_callbacks(packet)
+        @on_message_lock.synchronize do
+          @on_message ? @on_message.call(packet) : super(packet)
+        end
       else
         super(packet)
-      end
-    end
-
-    def deliver_publish_messages_to_callbacks(packet)
-      @publish_lock.synchronize do
-        @on_publish_callbacks.each do |callback|
-          begin
-            callback.call(packet)
-          rescue StandardError => e
-            @logger.exception(e, 'Error raised by publish callback')
-          end
-        end
       end
     end
   end

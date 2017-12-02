@@ -20,7 +20,7 @@ module DXLClient
       raise ArgumentError, 'Block not given for task' unless block
       @destroy_lock.synchronize do
         unless @pool_alive
-          raise DXLClient::Error::ShutdownError,
+          raise DXLClient::Error::DXLError,
                 format('Thread pool %s has already been destroyed, %s',
                        @thread_prefix, 'cannot add new task')
         end

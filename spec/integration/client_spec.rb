@@ -8,7 +8,7 @@ require 'integration/test_service'
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe DXLClient::Client do
-  it 'can connect and disconnect to a broker without error' do
+  it 'should connect and disconnect to a broker without error' do
     ClientHelpers.with_integration_client(0) do |client|
       client.connect
       expect(client.connected?).to be true
@@ -17,7 +17,7 @@ describe DXLClient::Client do
     end
   end
 
-  it 'can subscribe and unsubscribe to a topic without error' do
+  it 'should subscribe and unsubscribe to a topic without error' do
     ClientHelpers.with_integration_client(0) do |client|
       client.connect
       topic = "client_spec_subscribe_#{SecureRandom.uuid}"
@@ -28,7 +28,7 @@ describe DXLClient::Client do
     end
   end
 
-  it 'can properly receive an error response from a service' do
+  it 'should properly receive an error response from a service' do
     ClientHelpers.with_integration_client(0) do |client|
       test_service = TestService.new(client)
       client.connect
@@ -54,7 +54,7 @@ describe DXLClient::Client do
     end
   end
 
-  it 'can receive event callbacks on all threads in callback pool' do
+  it 'should receive event callbacks on all threads in callback pool' do
     max_wait = 10
     thread_count = 10
 

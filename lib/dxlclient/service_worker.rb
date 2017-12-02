@@ -1,12 +1,13 @@
 require 'json'
 require 'set'
+require 'mqtt'
 
 require 'dxlclient/error'
 require 'dxlclient/message/request'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ClassLength
+  # rubocop: disable ClassLength
 
   # Worker thread logic which re-registers locally registered services with the
   # DXL fabric as the service's Time-To-Live value expires and as disconnect /
@@ -27,7 +28,7 @@ module DXLClient
       @manager.services_lock.synchronize do
         all_services_registered = @manager.services.values.all? do |service|
           @logger.debug("Re-registering service: #{service.service_type}")
-          register_service_if_connected(service)
+          register_service(service)
         end
         @manager.services_ttl_condition.broadcast if all_services_registered
       end
@@ -110,25 +111,13 @@ module DXLClient
       end
     end
 
-    def register_service_if_connected(service)
-      register_service(service)
-      true
-    rescue MQTT::NotConnectedException
-      @logger.errorf(
-        'Error registering service %s, client disconnected',
-        service.service_type
-      )
-      false
-    end
-
     def register_service(service)
       request = register_service_request(service)
       response = @client.sync_request(request)
       handle_register_service_response(service, response)
-    rescue StandardError => e
+    rescue DXLClient::Error::IOError => e
       @logger.errorf(
-        'Error registering service %s: %s. Code: %s.',
-        service.service_type, e.class.name, e.message
+        'Error registering service %s: %s.', service.service_type, e.message
       )
       false
     end

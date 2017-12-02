@@ -1,8 +1,8 @@
 require 'set'
 require 'thread'
-require 'timeout'
-
+require 'mqtt'
 require 'dxlclient/callback/response_callback'
+require 'dxlclient/error'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
@@ -51,7 +51,7 @@ module DXLClient
       register_request(request, response_callback)
       begin
         @client.send_request(request)
-      rescue MQTT::NotConnectedException, SocketError
+      rescue DXLClient::Error::IOError
         unregister_request(request)
         raise
       end
@@ -101,7 +101,7 @@ module DXLClient
     def wait_for_next_response(wait_start, now, message_id, timeout)
       wait_time_remaining = wait_start - now + timeout
       if wait_time_remaining <= 0
-        raise Timeout::Error,
+        raise DXLClient::Error::WaitTimeoutError,
               "Timeout waiting for response to message: #{message_id}"
       end
       @response_condition.wait(@requests_lock, wait_time_remaining)

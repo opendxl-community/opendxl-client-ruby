@@ -5,7 +5,7 @@ require 'integration/client_helpers'
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'event callbacks', :integration do
-  it 'received for every event request made' do
+  it 'should be received for every event request made' do
     send_count = 10_000
     max_wait = 120
     receive_count = 0

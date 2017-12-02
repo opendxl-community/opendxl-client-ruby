@@ -7,10 +7,9 @@ require 'integration/client_helpers'
 
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
-describe 'event callbacks for multiple clients', :integration do
+describe 'event callbacks for multiple clients', :integration, :slow do
   it 'should be received for every event sent' do
     logger = DXLClient::Logger.logger(File.basename(__FILE__, '.rb'))
-    logger.level = DXLClient::Logger::DEBUG
 
     max_wait = 600
     max_connect_wait = 120
@@ -35,6 +34,7 @@ describe 'event callbacks for multiple clients', :integration do
       send_client.connect
       topic = "event_throughput_runner_spec_#{SecureRandom.uuid}"
 
+      # Create a DXL client for each thread up to thread count
       client_threads = Array.new(thread_count) do |counter|
         Thread.new do
           per_client_mutex = Mutex.new
@@ -48,17 +48,18 @@ describe 'event callbacks for multiple clients', :integration do
           ClientHelpers.with_integration_client(0) do |client|
             retries = max_connect_retries
 
+            # Attempt to connect client up to configured number of retries
             connect_time_start = loop do
               connect_attempt_start = Time.now
               begin
                 client.connect
                 break connect_attempt_start
-              rescue StandardError, MQTT::Exception => e
+              rescue StandardError => e
                 retries -= 1
                 has_failed = cross_client_mutex.synchronize do
                   all_clients_connect_retries += 1
                   if retries.zero? && !failed
-                    logger.debugf('Failed to connect %d after retries: %s',
+                    logger.errorf('Failed to connect %s after retries: %s',
                                   thread_name, e.message)
                     failed = true
                     all_clients_connected_condition.broadcast
@@ -69,7 +70,9 @@ describe 'event callbacks for multiple clients', :integration do
               end
             end
 
+            # Keep going if the client is connected...
             if connect_time_start
+              # Add a callback to receive events
               client.add_event_callback(topic) do |event|
                 per_client_mutex.synchronize do
                   events_received += 1
@@ -86,6 +89,8 @@ describe 'event callbacks for multiple clients', :integration do
                 end
               end
 
+              # Pause the current thread until all clients from all threads
+              # have been connected
               cross_client_mutex.synchronize do
                 clients_connected += 1
                 if clients_connected == thread_count
@@ -95,12 +100,14 @@ describe 'event callbacks for multiple clients', :integration do
                                              connect_time_start
                   all_clients_connected_condition.broadcast
 
+                  # All clients have been connected so send events
                   events_to_send.times do |count|
                     event = DXLClient::Message::Event.new(topic)
                     event.payload = count.to_s
                     begin
-                      client.send_event(event)
-                    rescue StandardError
+                      send_client.send_event(event)
+                    rescue StandardError => e
+                      logger.errorf('Failed to send event: %s', e.message)
                       failed = true
                       raise
                     end
@@ -109,10 +116,12 @@ describe 'event callbacks for multiple clients', :integration do
                                     events_to_send)
                     end
                   end
+                  logger.debug('All events sent')
                 else
+                  # Not all clients have been connected yet so wait.
                   if (clients_connected % 10).zero?
                     logger.debugf(
-                      'Clients connected: %d of %d. Last connected: %s',
+                      'Clients connected: %d of %d. Last connected: %s.',
                       clients_connected, thread_count, thread_name
                     )
                   end
@@ -124,10 +133,15 @@ describe 'event callbacks for multiple clients', :integration do
                     all_clients_connected_condition.wait(cross_client_mutex,
                                                          wait_remaining)
                   end
-                  failed = true if clients_connected < thread_count
+                  if !failed && clients_connected < thread_count
+                    failed = true
+                    all_clients_connected_condition.broadcast
+                  end
                 end
               end
 
+              # Wait until all of the events have been received for the
+              # client associated with the current thread
               per_client_mutex.synchronize do
                 ClientHelpers.while_not_done_and_time_remaining(
                   lambda do
@@ -166,6 +180,7 @@ describe 'event callbacks for multiple clients', :integration do
               thread_name,
               events_received
             )
+            # Return the number of events that the client received
             events_received
           end
         end
@@ -173,6 +188,8 @@ describe 'event callbacks for multiple clients', :integration do
 
       start = Time.now
 
+      # Collect the number of events received by each client (return value
+      # from the associated thread)
       events_received_per_thread = client_threads.collect do |thread|
         thread.join
         thread.value

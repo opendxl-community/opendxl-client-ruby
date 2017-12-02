@@ -9,11 +9,21 @@ module DXLClient
     end
 
     def self.current_thread_name(name)
-      current_thread = Thread.current
-      if current_thread.respond_to?(:name)
-        current_thread.name = name
+      Thread.current.tap do |current_thread|
+        if current_thread.respond_to?(:name)
+          current_thread.name = name
+        else
+          current_thread[:name] = name
+        end
+      end
+      name
+    end
+
+    def self.exception_message(exception)
+      if exception.message == exception.class.to_s
+        exception.message
       else
-        current_thread[:name] = name
+        "#{exception.message} (#{exception.class})"
       end
     end
   end

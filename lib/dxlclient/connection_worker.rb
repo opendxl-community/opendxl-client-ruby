@@ -1,11 +1,14 @@
 require 'socket'
 require 'thread'
+require 'mqtt'
 require 'dxlclient/broker_connection_time'
+require 'dxlclient/error'
 require 'dxlclient/logger'
+require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ClassLength
+  # rubocop: disable ClassLength
 
   # Worker thread logic for handling broker connections
   class ConnectionWorker
@@ -23,7 +26,7 @@ module DXLClient
     REQUEST_SHUTDOWN = 3
 
     # @param connection_manager [DXLClient::ConnectionManager]
-    # @param mqtt_client [MQTT::Client]
+    # @param mqtt_client [DXLClient::MQTTClientAdapter]
     # @param config [DXLClient::Config]
     def initialize(connection_manager, mqtt_client, config, client_object_id)
       @logger = DXLClient::Logger.logger(self.class.name)
@@ -71,7 +74,7 @@ module DXLClient
         process_connect_thread_request
       end
     # disconnection errors
-    rescue MQTT::Exception => e
+    rescue StandardError, MQTT::Exception => e
       handle_connection_dropped(e)
     end
 
@@ -164,8 +167,8 @@ module DXLClient
       else
         begin
           connect_to_broker(host, port)
-        rescue StandardError => e
-          handle_failure_to_connect_to_one_broker(host, port, e)
+        rescue DXLClient::Error::IOError => e
+          handle_failure_to_connect_to_one_broker(e)
         end
       end
     end
@@ -173,16 +176,14 @@ module DXLClient
     def connect_to_broker(host, port)
       @mqtt_client.host = host
       @mqtt_client.port = port
-      @logger.debug("Connecting to broker: #{host}:#{port}...")
+      @logger.debugf('Connecting to broker: %s:%d', host, port)
       @mqtt_client.connect
-      @logger.info("Connected to broker: #{host}:#{port}")
+      @logger.infof('Connected to broker: %s:%d', host, port)
       [true, nil]
     end
 
-    def handle_failure_to_connect_to_one_broker(host, port, exception)
-      @logger.error(
-        "Failed to connect to #{host}:#{port}: #{exception.message}"
-      )
+    def handle_failure_to_connect_to_one_broker(exception)
+      @logger.error(exception.message)
       [false, exception]
     end
 
@@ -191,7 +192,9 @@ module DXLClient
       if @manager.connect_state == RECONNECTING
         @manager.connect_state = NOT_CONNECTED
       end
-      [false, SocketError.new('Failed to connect, client has been shutdown')]
+      [false, DXLClient::Error::IOError.new(
+        'Failed to connect, client has been shutdown'
+      )]
     end
 
     def handle_connected_to_broker
@@ -218,7 +221,7 @@ module DXLClient
         @manager.connect_state = NOT_CONNECTED
       end
       @manager.connect_error ||=
-        SocketError.new('Unable to connect to any brokers')
+        DXLClient::Error::IOError.new('Unable to connect to any brokers')
 
       if @connect_request_tries_remaining.zero? && @config.connect_retries > 0
         @connect_request_tries_remaining = @config.connect_retries - 1
@@ -236,12 +239,12 @@ module DXLClient
       if @manager.connect_request == REQUEST_DISCONNECT
         @manager.connect_request = REQUEST_NONE
       end
-    rescue StandardError => e
+    rescue DXLClient::Error::IOError => e
       handle_failure_to_disconnect(e)
     end
 
     def handle_failure_to_disconnect(exception)
-      @logger.debug("Failed to disconnect from broker: #{exception.message}")
+      @logger.debugf('Failed to disconnect from broker: %s', exception.message)
       @manager.connect_error = exception
       @manager.connect_state = UNKNOWN
     end
@@ -262,7 +265,7 @@ module DXLClient
     def setup_reconnect_state_for_dropped_connection(mqtt_exception)
       @manager.connect_state = RECONNECTING
       @logger.errorf('Connection error: %s, retrying connection',
-                     mqtt_exception.message)
+                     Util.exception_message(mqtt_exception))
     end
 
     def handle_no_reconnects_for_dropped_connection(mqtt_exception)
@@ -276,10 +279,11 @@ module DXLClient
     end
 
     def send_error_for_dropped_connection(mqtt_exception)
-      error = format('Connection error: %s, not retrying connection',
-                     mqtt_exception.message)
-      @logger.errorf(error)
-      @manager.connect_error = SocketError.new(error)
+      @logger.errorf('Connection error: %s, not retrying connection',
+                     Util.exception_message(mqtt_exception))
+      @manager.connect_error = DXLClient::Error::IOError.new(
+        mqtt_exception.message
+      )
       @manager.connect_response_condition.broadcast
     end
 

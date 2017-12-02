@@ -9,7 +9,7 @@ require 'integration/test_service'
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
 describe 'sync requests', :integration do
-  it 'receive a response for every concurrent request made' do
+  it 'should receive a response for every concurrent request made' do
     max_wait = 300
     request_count = 500
     ClientHelpers.with_integration_client(0) do |client|

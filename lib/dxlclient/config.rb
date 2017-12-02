@@ -5,7 +5,7 @@ require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ClassLength
+  # rubocop: disable ClassLength
 
   # The Data Exchange Layer (DXL) client configuration contains the information
   # necessary to connect a {DXLClient::Client} to the DXL fabric.

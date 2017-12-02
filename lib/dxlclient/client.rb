@@ -1,6 +1,3 @@
-require 'mqtt'
-require 'mqtt/client'
-
 require 'dxlclient/callback_manager'
 require 'dxlclient/connection_manager'
 require 'dxlclient/error'
@@ -8,23 +5,22 @@ require 'dxlclient/message/event'
 require 'dxlclient/message/request'
 require 'dxlclient/message/response'
 require 'dxlclient/message_encoder'
-require 'dxlclient/mqtt_client'
+require 'dxlclient/mqtt_client_adapter'
 require 'dxlclient/request_manager'
 require 'dxlclient/service_manager'
 require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ClassLength
+  # rubocop: disable ClassLength
 
   # Class responsible for all communication with the Data Exchange Layer (DXL)
   # fabric (it can be thought of as the "main" class).
   class Client
     REPLY_TO_PREFIX = '/mcafee/client/'.freeze
     DEFAULT_REQUEST_TIMEOUT = 60 * 60
-    MQTT_QOS = 0
 
-    private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT, :MQTT_QOS
+    private_constant :REPLY_TO_PREFIX, :DEFAULT_REQUEST_TIMEOUT
 
     # rubocop: disable AbcSize, MethodLength
 
@@ -37,7 +33,7 @@ module DXLClient
       @subscriptions = Set.new
       @subscription_lock = Mutex.new
 
-      @mqtt_client = MQTTClient.new(config)
+      @mqtt_client = MQTTClientAdapter.new(config)
       @connection_manager = ConnectionManager.new(config,
                                                   @mqtt_client,
                                                   object_id)
@@ -112,30 +108,22 @@ module DXLClient
 
     def subscribe(topics)
       @subscription_lock.synchronize do
-        subscriptions = topics_for_mqtt_client(topics)
-        @logger.debug("Subscribing to topics: #{subscriptions}.")
-
-        @mqtt_client.subscribe(subscriptions) if @mqtt_client.connected?
-
-        if subscriptions.is_a?(String)
-          @subscriptions.add(subscriptions)
+        topics_to_subscribe = send_subscribe_request(topics)
+        if topics_to_subscribe.is_a?(String)
+          @subscriptions.add(topics_to_subscribe)
         else
-          @subscriptions.merge(subscriptions)
+          @subscriptions.merge(topics_to_subscribe)
         end
       end
     end
 
     def unsubscribe(topics)
       @subscription_lock.synchronize do
-        subscriptions = topics_for_mqtt_client(topics)
-        @logger.debug("Unsubscribing from topics: #{subscriptions}.")
-
-        @mqtt_client.unsubscribe(subscriptions) if @mqtt_client.connected?
-
-        if subscriptions.respond_to?(:each)
-          @subscriptions.subtract(subscriptions)
+        topics_to_unsubscribe = send_unsubscribe_request(topics)
+        if topics_to_unsubscribe.respond_to?(:each)
+          @subscriptions.subtract(topics_to_unsubscribe)
         else
-          @subscriptions.delete(subscriptions)
+          @subscriptions.delete(topics_to_unsubscribe)
         end
       end
     end
@@ -193,11 +181,13 @@ module DXLClient
     def destroy
       @service_manager.destroy
       @request_manager.destroy
+      unsubscribe_all
       @connection_manager.destroy
       @callback_manager.destroy
-    rescue MQTT::NotConnectedException
-      @logger.debug(
-        'Unable to complete cleanup since MQTT client not connected'
+    rescue DXLClient::Error::IOError => e
+      @logger.debugf(
+        'Unable to complete cleanup since MQTT client not connected: %s',
+        e.message
       )
     end
 
@@ -236,7 +226,7 @@ module DXLClient
       @connection_manager.add_connect_callback(
         @service_manager.method(:on_connect)
       )
-      @mqtt_client.add_publish_callback(method(:on_message))
+      @mqtt_client.add_message_callback(method(:on_message))
     end
 
     def topics_for_mqtt_client(topics)
@@ -244,7 +234,7 @@ module DXLClient
       if topics.respond_to?(:each)
         [*topics]
       elsif topics.is_a?(String)
-        topics
+        [topics]
       else
         raise ArgumentError,
               "Unsupported data type for topics: #{topics.name}"
@@ -268,7 +258,48 @@ module DXLClient
     end
 
     def publish_message(topic, payload)
-      @mqtt_client.publish(topic, payload, false, MQTT_QOS)
+      @mqtt_client.publish(topic, payload)
     end
+
+    def unsubscribe_all
+      @subscription_lock.synchronize do
+        send_unsubscribe_request(@subscriptions)
+        @subscriptions.clear
+      end
+    end
+
+    def send_subscribe_request(topics)
+      topics_for_mqtt_client(topics).tap do |topics_to_subscribe|
+        @logger.debug("Subscribing to topics: #{topics_to_subscribe}.")
+
+        if @mqtt_client.connected?
+          begin
+            @mqtt_client.subscribe(topics_to_subscribe)
+          rescue DXLClient::Error::IOError => e
+            @logger.errorf(e.message)
+          end
+        end
+      end
+    end
+
+    # rubocop: disable MethodLength
+
+    def send_unsubscribe_request(topics)
+      topics_for_mqtt_client(topics).tap do |topics_to_unsubscribe|
+        unless topics_to_unsubscribe.empty?
+          @logger.debugf('Unsubscribing from topics: %s',
+                         topics_to_unsubscribe)
+          if @mqtt_client.connected?
+            begin
+              @mqtt_client.unsubscribe(topics_to_unsubscribe)
+            rescue DXLClient::Error::IOError => e
+              @logger.errorf(e.message)
+            end
+          end
+        end
+      end
+    end
+
+    # rubocop: enable MethodLength
   end
 end

@@ -2,6 +2,7 @@ require 'socket'
 require 'thread'
 require 'dxlclient/connection_worker'
 require 'dxlclient/logger'
+require 'dxlclient/error'
 require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
@@ -18,7 +19,7 @@ module DXLClient
     # rubocop: disable AbcSize, MethodLength
 
     # @param config [DXLClient::Config]
-    # @param mqtt_client [MQTT::Client]
+    # @param mqtt_client [DXLClient::MQTTClientAdapter]
     def initialize(config, mqtt_client, client_object_id)
       @logger = DXLClient::Logger.logger(self.class.name)
       @config = config
@@ -66,19 +67,26 @@ module DXLClient
       @worker.add_connect_callback(callback)
     end
 
+    # rubocop: disable MethodLength
+
+    # Connects to a broker
     def connect
       @logger.debug('Received connect call')
       @connect_lock.synchronize do
         until @connect_state == ConnectionWorker::CONNECTED
           if @connect_state == ConnectionWorker::SHUTDOWN ||
              @connect_request == ConnectionWorker::REQUEST_SHUTDOWN
-            raise SocketError, 'Failed to connect, client has been shutdown'
+            raise DXLClient::Error::IOError,
+                  'Failed to connect, client has been shutdown'
           end
           handle_connect_request
         end
       end
     end
 
+    # rubocop: enable MethodLength
+
+    # Disconnects from a broker
     def disconnect
       @logger.debug('Received disconnect call')
       @connect_lock.synchronize do
@@ -97,8 +105,10 @@ module DXLClient
     private
 
     def handle_connect_request
-      raise SocketError, 'Failed to connect, disconnect in process' \
-        if @connect_request == ConnectionWorker::REQUEST_DISCONNECT
+      if @connect_request == ConnectionWorker::REQUEST_DISCONNECT
+        raise DXLClient::Error::IOError,
+              'Failed to connect, disconnect in process'
+      end
       @connect_request = ConnectionWorker::REQUEST_CONNECT
       @connect_request_condition.signal
       @connect_response_condition.wait(@connect_lock)
@@ -107,7 +117,8 @@ module DXLClient
 
     def handle_disconnect_request
       if @connect_request == ConnectionWorker::REQUEST_CONNECT
-        raise SocketError, 'Failed to disconnect, connect in process'
+        raise DXLClient::Error::IOError,
+              'Failed to disconnect, connect in process'
       end
       unless @connect_request == ConnectionWorker::REQUEST_SHUTDOWN
         @connect_request = ConnectionWorker::REQUEST_DISCONNECT

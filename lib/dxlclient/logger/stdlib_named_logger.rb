@@ -45,6 +45,10 @@ module DXLClient
         add(DXLClient::Logger::INFO, format(*args))
       end
 
+      def reopen(log_device)
+        @logger.reopen(log_device)
+      end
+
       def warn(message)
         add(DXLClient::Logger::WARN, message)
       end

@@ -4,7 +4,7 @@ require 'dxlclient/logger'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
-  # rubocop:disable ModuleLength,
+  # rubocop: disable ModuleLength
 
   # Module with helpers for checking the amount of time needed to connect to
   # a broker.

@@ -7,10 +7,11 @@ require 'integration/client_helpers'
 require 'integration/test_service'
 
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
-logger = DXLClient::Logger.logger(File.basename(__FILE__, '.rb'))
 
-describe 'a flood of async requests', :integration do
-  it 'receive a response for every request made' do
+describe 'a flood of async requests', :integration, :slow do
+  logger = DXLClient::Logger.logger(File.basename(__FILE__, '.rb'))
+
+  it 'should receive a response for every request made' do
     request_count = 1000
     max_wait = 90
     topic = "async_flood_sync_#{SecureRandom.uuid}"
