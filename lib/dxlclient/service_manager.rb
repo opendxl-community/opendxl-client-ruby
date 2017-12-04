@@ -53,34 +53,30 @@ module DXLClient
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def add_service_async(service_reg_info)
-      request = @worker.register_service_request(service_reg_info)
-      @client.async_request(request) do
+      @services_lock.synchronize do
+        request = @worker.register_service_request(service_reg_info)
+        if_client_connected { @client.async_request(request) }
         add_service_callbacks(service_reg_info)
+        add_service_entry(service_reg_info)
       end
-      add_service_entry(service_reg_info)
     end
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def add_service_sync(service_reg_info,
                          timeout = SERVICE_REGISTRATION_REQUEST_TIMEOUT)
-      request = @worker.register_service_request(service_reg_info)
-      response = @client.sync_request(request, timeout)
-      if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-        raise DXLClient::Error::DXLError,
-              format('Error registering service %s. Code: %s.',
-                     response.error_message, response.error_code)
+      @services_lock.synchronize do
+        register_service_sync(service_reg_info, timeout)
+        add_service_callbacks(service_reg_info)
+        add_service_entry(service_reg_info)
       end
-      add_service_callbacks(service_reg_info)
-      add_service_entry(service_reg_info)
     end
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def remove_service_async(service_reg_info)
       request = unregister_service_request(service_reg_info)
-      @client.async_request(request) do
-        remove_service_callbacks(service_reg_info)
-      end
       @services_lock.synchronize do
+        if_client_connected { @client.async_request(request) }
+        remove_service_callbacks(service_reg_info)
         @services.delete(service_reg_info.service_id)
       end
     end
@@ -88,9 +84,9 @@ module DXLClient
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def remove_service_sync(service_reg_info,
                             timeout = SERVICE_UNREGISTRATION_REQUEST_TIMEOUT)
-      unregister_service_sync(service_reg_info, timeout)
-      remove_service_callbacks(service_reg_info)
       @services_lock.synchronize do
+        unregister_service_sync(service_reg_info, timeout)
+        remove_service_callbacks(service_reg_info)
         @services.delete(service_reg_info.service_id)
       end
     end
@@ -100,6 +96,15 @@ module DXLClient
     end
 
     private
+
+    def if_client_connected
+      return unless @client.connected?
+      begin
+        yield
+      rescue DXLClient::Error::IOError => e
+        @logger.errorf(e.message)
+      end
+    end
 
     def create_worker_thread
       Thread.new do
@@ -123,24 +128,34 @@ module DXLClient
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]
     def add_service_entry(service_reg_info)
-      @services_lock.synchronize do
-        @services[service_reg_info.service_id] = service_reg_info
-        service_reg_info.last_registration = Time.now
-        @services_ttl_condition.broadcast
+      @services[service_reg_info.service_id] = service_reg_info
+      service_reg_info.last_registration = Time.now
+      @services_ttl_condition.broadcast
+    end
+
+    def register_service_sync(service_reg_info, timeout)
+      request = @worker.register_service_request(service_reg_info)
+      if_client_connected do
+        response = @client.sync_request(request, timeout)
+        if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+          raise DXLClient::Error::DXLError,
+                format('Error registering service %s. Code: %s.',
+                       response.error_message, response.error_code)
+        end
       end
     end
 
     def unregister_service_sync(service_reg_info, timeout)
       request = unregister_service_request(service_reg_info)
-      response = @client.sync_request(request, timeout)
-      # rubocop: disable GuardClause
-      if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-        error = format('Error unregistering service %s: %s. Code: %s',
-                       service_reg_info.service_type, response.error_message,
-                       response.error_code)
-        raise DXLClient::Error::DXLError, error
+      if_client_connected do
+        response = @client.sync_request(request, timeout)
+        if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
+          error = format('Error unregistering service %s: %s. Code: %s',
+                         service_reg_info.service_type, response.error_message,
+                         response.error_code)
+          raise DXLClient::Error::DXLError, error
+        end
       end
-      # rubocop: enable GuardClause
     end
 
     # @param service_reg_info [DXLClient::ServiceRegistrationInfo]

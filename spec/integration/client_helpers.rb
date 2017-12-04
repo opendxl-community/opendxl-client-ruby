@@ -1,3 +1,4 @@
+require 'json'
 require 'dxlclient/config'
 require 'dxlclient/error'
 require 'dxlclient/logger'
@@ -7,6 +8,7 @@ module ClientHelpers
   DEFAULT_RETRIES = 3
   DEFAULT_TIMEOUT = 5 * 60
   RESPONSE_WAIT = 60
+  SERVICE_REGISTRATION_WAIT = 60
   CLIENT_CONFIG_FILE = 'client_config.cfg'.freeze
 
   def self.client_config_file
@@ -64,6 +66,10 @@ module ClientHelpers
     end
 
     !continue
+  end
+
+  def self.message_payload_as_json(message)
+    JSON.parse(message.payload.chomp("\0"))
   end
 
   def self.with_logged_messages_captured

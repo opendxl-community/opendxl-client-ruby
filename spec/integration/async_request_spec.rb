@@ -1,7 +1,5 @@
 require 'dxlclient/client'
 require 'dxlclient/message/request'
-require 'dxlclient/message/error_response'
-require 'dxlclient/message/response'
 require 'dxlclient/service_registration_info'
 require 'integration/client_helpers'
 require 'integration/test_service'
