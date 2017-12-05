@@ -39,12 +39,16 @@ module DXLClient
       end
     end
 
+    def current_thread_in_pool?
+      @task_threads.include?(Thread.current)
+    end
+
     private
 
     def create_task_threads(num_threads)
       @logger.debugf('Creating thread pool %s. Threads: %d. Queue depth: %s.',
                      @thread_prefix, num_threads, @queue_size)
-      @task_threads = Array.new(num_threads) do |thread_id|
+      @task_threads = Set.new(num_threads.times) do |thread_id|
         Thread.new { thread_run(thread_id + 1) }
       end
     end

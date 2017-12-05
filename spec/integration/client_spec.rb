@@ -110,4 +110,59 @@ describe DXLClient::Client do
       end
     end
   end
+
+  it 'should raise an error for a sync request attempted from a callback' do
+    max_wait = 5
+    event_topic = \
+      "client_spec_sync_from_callback_event_#{SecureRandom.uuid}"
+    request_topic = \
+      "client_spec_sync_from_callback_request_#{SecureRandom.uuid}"
+
+    ClientHelpers.with_integration_client do |client|
+      sync_request_mutex = Mutex.new
+      sync_request_result_condition = ConditionVariable.new
+      sync_request_result = nil
+      sync_request_received = nil
+
+      client.connect
+
+      reg_info = DXLClient::ServiceRegistrationInfo.new(
+        client, 'client_spec_sync_request_service'
+      )
+      reg_info.add_topic(request_topic) do |request|
+        sync_request_received = request
+        client.send_response(DXLClient::Message::Response.new(request))
+      end
+      client.register_service_sync(reg_info, ClientHelpers::DEFAULT_TIMEOUT)
+
+      client.add_event_callback(event_topic) do
+        sync_request_mutex.synchronize do
+          begin
+            request = DXLClient::Message::Request.new(request_topic)
+            sync_request_result = client.sync_request(request)
+          rescue StandardError => e
+            sync_request_result = e
+          end
+          sync_request_result_condition.broadcast
+        end
+      end
+
+      client.send_event(DXLClient::Message::Event.new(event_topic))
+
+      sync_request_mutex.synchronize do
+        ClientHelpers.while_not_done_and_time_remaining(
+          -> { sync_request_result.nil? }, max_wait
+        ) do |wait_remaining|
+          sync_request_result_condition.wait(sync_request_mutex,
+                                             wait_remaining)
+        end
+      end
+
+      expect(sync_request_result)
+        .to be_an_instance_of(DXLClient::Error::DXLError)
+      expect(sync_request_result.message)
+        .to include('must be made on a different thread')
+      expect(sync_request_received).to be_nil
+    end
+  end
 end

@@ -3,6 +3,8 @@ require 'dxlclient/queue_thread_pool'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
+  # rubocop: disable ClassLength
+
   # Manager which handles registrations and dispatches messages to callbacks.
   class CallbackManager
     # @param client [DXLClient::Client]
@@ -35,6 +37,10 @@ module DXLClient
         callback_info.callback == callback
       end
       unsubscribe_callback(callbacks, entry, topic, unsubscribe)
+    end
+
+    def current_thread_in_callback_pool?
+      @callback_thread_pool.current_thread_in_pool?
     end
 
     # @param message [DXLClient::Message::Message]

@@ -135,6 +135,13 @@ module DXLClient
     end
 
     def sync_request(request, timeout = DEFAULT_REQUEST_TIMEOUT)
+      if @callback_manager.current_thread_in_callback_pool?
+        raise DXLClient::Error::DXLError,
+              format('%s %s %s',
+                     'Synchronous requests may not be invoked while',
+                     'handling an incoming message. The synchronous request',
+                     'must be made on a different thread.')
+      end
       @request_manager.sync_request(request, timeout)
     end
 
