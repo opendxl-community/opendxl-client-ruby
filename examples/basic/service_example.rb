@@ -33,7 +33,8 @@ DXLClient::Client.new(config) do |client|
   request.payload = 'ping'
   response = client.sync_request(request)
   if response.message_type == DXLClient::Message::MESSAGE_TYPE_ERROR
-    raise Exception, "Error: #{response.error_message} (#{response.error_code})"
+    raise StandardError,
+          "Error: #{response.error_message} (#{response.error_code})"
   else
     puts("Client received response payload: #{response.payload}")
   end

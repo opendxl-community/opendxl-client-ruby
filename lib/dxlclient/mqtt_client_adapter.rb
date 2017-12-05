@@ -5,6 +5,8 @@ require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
 module DXLClient
+  # rubocop: disable ClassLength
+
   # Wrapper for the underlying MQTT::Client class which exposes the subset
   # of client functionality that DXL needs and which translates MQTT exceptions
   # into exceptions under the DXLClient namespace.
@@ -46,7 +48,20 @@ module DXLClient
     def connect
       exception_prefix =
         "Failed to connect to #{@mqtt_client.host}:#{@mqtt_client.port}"
-      recast_exception(exception_prefix) { @mqtt_client.connect }
+      begin
+        recast_exception(exception_prefix) { @mqtt_client.connect }
+      rescue DXLClient::Error::IOError
+        # Need to disconnect the client if it was connected but raised an error,
+        # e.g, due to a timeout in receiving a connack packet for the new
+        # connection. In those cases, it is likely that the client reader
+        # thread would never have been launched and so any packets received on
+        # the socket would never be read. The disconnect here at least ensures
+        # that the socket connection with the broker is freed up.
+        # TODO: Consider filing an issue / PR with ruby-mqtt to make this
+        # cleanup happen automatically.
+        @mqtt_client.disconnect if @mqtt_client.connected?
+        raise
+      end
     end
 
     def connected?

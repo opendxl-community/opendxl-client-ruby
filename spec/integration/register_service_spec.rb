@@ -1,4 +1,5 @@
 require 'dxlclient/client'
+require 'dxlclient/logger'
 require 'dxlclient/message/request'
 require 'dxlclient/message/response'
 require 'dxlclient/service_registration_info'

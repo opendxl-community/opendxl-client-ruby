@@ -1,23 +1,22 @@
 require 'dxlclient/client'
 require 'dxlclient/logger'
 require 'dxlclient/message/request'
-require 'dxlclient/message/response'
 require 'dxlclient/service_registration_info'
 require 'dxlclient/util'
 require 'integration/client_helpers'
+require 'integration/test_service'
 
 DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 
-describe 'event callbacks for multiple clients', :integration, :slow do
-  it 'should be received for every event sent' do
+describe 'sync requests for multiple clients', :integration, :slow do
+  it 'should be successful for every request made' do
     logger = DXLClient::Logger.logger(File.basename(__FILE__, '.rb'))
 
-    max_wait = 600
     max_connect_wait = 120
     max_connect_retries = 10
-    events_to_send = 100
+    requests_to_send = 10
     thread_count = 1000
-    expected_events_to_receive = events_to_send * thread_count
+    expected_requests_to_process = requests_to_send * thread_count
 
     start = Time.now
 
@@ -26,26 +25,30 @@ describe 'event callbacks for multiple clients', :integration, :slow do
     all_clients_connect_time = nil
     all_clients_connect_retries = 0
     requests_start_time = nil
-    threads_with_all_events_received = 0
+    threads_with_all_requests_processed = 0
     failed = false
 
     all_clients_connected_condition = ConditionVariable.new
 
-    ClientHelpers.with_integration_client(0) do |send_client|
-      send_client.connect
-      topic = "event_throughput_runner_spec_#{SecureRandom.uuid}"
+    ClientHelpers.with_integration_client(0) do |server_client|
+      test_service = TestService.new(server_client)
+      server_client.connect
+      topic = 'send_request_throughput_runner_spec'
+      reg_info = DXLClient::ServiceRegistrationInfo.new(
+        server_client, 'send_request_throughput_runner_spec_service'
+      )
+      reg_info.add_topic(topic, test_service)
+      server_client.register_service_sync(reg_info,
+                                          ClientHelpers::DEFAULT_TIMEOUT)
 
       ClientHelpers.with_logged_messages_captured do
         # Create a DXL client for each thread up to thread count
         client_threads = Array.new(thread_count) do |counter|
           Thread.new do
-            per_client_mutex = Mutex.new
-            all_events_received_condition = ConditionVariable.new
+            request_times = nil
             thread_name = DXLClient::Util.current_thread_name(
-              "EventThroughputRunnerTest-#{counter + 1}"
+              "SyncRequestThroughputRunnerTest-#{counter + 1}"
             )
-
-            events_received = 0
 
             ClientHelpers.with_integration_client(0) do |client|
               retries = max_connect_retries
@@ -76,23 +79,6 @@ describe 'event callbacks for multiple clients', :integration, :slow do
 
               # Keep going if the client is connected...
               if connect_time_start
-                # Add a callback to receive events
-                client.add_event_callback(topic) do |event|
-                  per_client_mutex.synchronize do
-                    events_received += 1
-                    if (events_received % 100).zero?
-                      logger.debugf(
-                        'Events received for %s: %d of %d. Last event: %s',
-                        thread_name, events_received,
-                        events_to_send, event.payload
-                      )
-                    end
-                    if events_received == events_to_send
-                      all_events_received_condition.broadcast
-                    end
-                  end
-                end
-
                 # Pause the current thread until all clients from all threads
                 # have been connected
                 cross_client_mutex.synchronize do
@@ -104,24 +90,6 @@ describe 'event callbacks for multiple clients', :integration, :slow do
                     all_clients_connect_time = requests_start_time -
                                                connect_time_start
                     all_clients_connected_condition.broadcast
-
-                    # All clients have been connected so send events
-                    events_to_send.times do |count|
-                      event = DXLClient::Message::Event.new(topic)
-                      event.payload = count.to_s
-                      begin
-                        send_client.send_event(event)
-                      rescue StandardError => e
-                        logger.errorf('Failed to send event: %s', e.message)
-                        failed = true
-                        raise
-                      end
-                      if (count % 10).zero?
-                        logger.debugf('Events sent: %d of %d.', count,
-                                      events_to_send)
-                      end
-                    end
-                    logger.debug('All events sent')
                   else
                     # Not all clients have been connected yet so wait.
                     if (clients_connected % 10).zero? &&
@@ -148,78 +116,84 @@ describe 'event callbacks for multiple clients', :integration, :slow do
                   end
                 end
 
-                # Wait until all of the events have been received for the
-                # client associated with the current thread
-                per_client_mutex.synchronize do
-                  ClientHelpers.while_not_done_and_time_remaining(
-                    lambda do
-                      !cross_client_mutex.synchronize { failed } &&
-                      events_received < events_to_send
-                    end,
-                    max_wait,
-                    start
-                  ) do |wait_remaining|
-                    all_events_received_condition.wait(per_client_mutex,
-                                                       wait_remaining)
-                  end
-                  if events_received < events_to_send
-                    logger.errorf(
-                      'Timed out waiting for events for %s. Received %d of %d.',
-                      thread_name, events_received, events_to_send
-                    )
-                  else
-                    cross_client_mutex.synchronize do
-                      threads_with_all_events_received += 1
-                      logger.debugf(
-                        'All events received for %s. %d of %d complete.',
-                        thread_name,
-                        threads_with_all_events_received,
-                        thread_count
-                      )
+                # All clients have been connected so send requests
+                request_times = Array.new(requests_to_send) do
+                  request = DXLClient::Message::Request.new(topic)
+                  start = Time.now
+                  begin
+                    response = client.sync_request(request)
+                    end_time = Time.now - start
+                    if response.is_a?(DXLClient::Message::ErrorResponse)
+                      raise StandardError,
+                            format(
+                              'Received error payload for request: %s (%d)',
+                              response.error_message, response.error_code
+                            )
                     end
+                    end_time
+                  rescue StandardError => e
+                    logger.errorf('Failed to send request: %s', e.message)
+                    cross_client_mutex.synchronize { failed = true }
+                    raise
+                  end
+                end
+
+                cross_client_mutex.synchronize do
+                  threads_with_all_requests_processed += 1
+                  if (threads_with_all_requests_processed % 100).zero?
+                    logger.debugf('All requests sent for %s, %d of %d complete',
+                                  thread_name,
+                                  threads_with_all_requests_processed,
+                                  thread_count)
                   end
                 end
               end
             end
 
-            per_client_mutex.synchronize do
-              logger.debugf(
-                'Thread complete: %s. Events received: %d.',
-                thread_name,
-                events_received
-              )
-              # Return the number of events that the client received
-              events_received
-            end
+            request_times
           end
         end
 
         thread_error = nil
-        # Collect the number of events received by each client (return value
+        # Collect the times for requests sent by each client (return value
         # from the associated thread)
-        events_received_per_thread = client_threads.collect do |thread|
+        request_times_per_thread = client_threads.collect do |thread|
           begin
             thread.join
             thread.value
           rescue StandardError => e
             thread_error = e
-            0
+            []
           end
         end
 
         expect(thread_error).to be_nil
-        expect(events_received_per_thread).to all(eql(events_to_send))
+
+        request_counts_per_thread = request_times_per_thread.collect(&:length)
+
+        expect(request_counts_per_thread).to all(eql(requests_to_send))
 
         requests_time = Time.now - requests_start_time
+        sorted_request_times = request_times_per_thread.flatten.sort
+        middle_request = expected_requests_to_process / 2
+        response_median =
+          if expected_requests_to_process.odd?
+            sorted_request_times[middle_request]
+          else
+            (sorted_request_times[middle_request] +
+              sorted_request_times[middle_request - 1]) / 2
+          end
 
         logger.debugf('Connect time: %f', all_clients_connect_time)
         logger.debugf('Connect retries: %d', all_clients_connect_retries)
-        logger.debugf('Total events: %d', events_to_send)
-        logger.debugf('Events/second: %f', events_to_send / requests_time)
-        logger.debugf('Total events received: %d', expected_events_to_receive)
-        logger.debugf('Total events received/second: %f',
-                      expected_events_to_receive / requests_time)
-        logger.debugf('Elapsed time: %f', requests_time)
+        logger.debugf('Request time: %f', requests_time)
+        logger.debugf('Total requests: %d', expected_requests_to_process)
+        logger.debugf('Requests/second: %f',
+                      expected_requests_to_process / requests_time)
+        logger.debugf('Average response time: %f',
+                      sorted_request_times.reduce(:+) /
+                        expected_requests_to_process)
+        logger.debugf('Median response time: %f', response_median)
       end
     end
   end

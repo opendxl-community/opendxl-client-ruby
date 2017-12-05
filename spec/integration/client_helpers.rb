@@ -85,8 +85,6 @@ module ClientHelpers
   def self.enable_capture_logging(log_device)
     root_logger = DXLClient::Logger.root_logger
     root_logger.log_device = log_device
-    loggers = root_logger.loggers
-    loggers.each_value { |logger| logger.reopen(log_device) }
   end
 
   def self.disable_capture_logging
