@@ -1,6 +1,7 @@
 require 'iniparse'
 
 require 'dxlclient/broker'
+require 'dxlclient/error'
 require 'dxlclient/util'
 
 # Module under which all of the DXL client functionality resides.
@@ -31,12 +32,14 @@ module DXLClient
                      :DEFAULT_RECONNECT_DELAY_RANDOM,
                      :DEFAULT_RECONNECT_WHEN_DISCONNECTED
 
-    attr_accessor :brokers, :broker_ca_bundle, :client_id,
+    attr_accessor :broker_ca_bundle, :client_id,
                   :cert_file, :private_key, :incoming_message_queue_size,
                   :incoming_message_thread_pool_size, :keep_alive_interval,
                   :connect_retries, :reconnect_back_off_multiplier,
                   :reconnect_delay, :reconnect_delay_max,
                   :reconnect_delay_random, :reconnect_when_disconnected
+
+    attr_reader :brokers
 
     # rubocop: disable AbcSize, MethodLength
 
@@ -53,7 +56,7 @@ module DXLClient
       @cert_file = get_setting('Certs', 'CertFile', cert_file)
       @private_key = get_setting('Certs', 'PrivateKey', private_key)
 
-      @brokers = brokers || brokers_from_config_section || []
+      @brokers = [*brokers || brokers_from_config_section]
       @client_id = get_setting('General', 'ClientId', nil,
                                Util.generate_id_as_string)
 
@@ -71,6 +74,10 @@ module DXLClient
     end
     # rubocop: enable AbcSize, MethodLength
 
+    def brokers=(value)
+      @brokers = [*value]
+    end
+
     # @return [DXLClient::Config]
     def self.create_dxl_config_from_file(config_file)
       new(nil, nil, nil, nil, config_file)
@@ -86,7 +93,7 @@ module DXLClient
       return unless @config_model && @config_model['Brokers']
       @config_model['Brokers'].lines.collect do |broker_option|
         if broker_option.is_a?(Array)
-          raise ArgumentError,
+          raise DXLClient::Error::MalformedBrokerError,
                 format('Broker entry %s defined %d times in config',
                        broker_option.first.key, broker_option.length)
         end
@@ -96,12 +103,12 @@ module DXLClient
 
     def broker_from_config_line(broker_info)
       if broker_info.length < 2
-        raise ArgumentError,
+        raise DXLClient::Error::MalformedBrokerError,
               "Missing elements in config broker line: #{broker_info}"
       end
       id, hosts, port = broker_config_line_elements(broker_info)
       unless hosts
-        raise ArgumentError,
+        raise DXLClient::Error::MalformedBrokerError,
               "No hosts found in config broker line: #{broker_info}"
       end
 
@@ -109,23 +116,18 @@ module DXLClient
     end
 
     def broker_config_line_elements(broker_info)
-      port_position = to_port_number(broker_info[0]) ? 0 : 1
+      port_position = get_port_position_in_broker_info(broker_info, 0)
       id = port_position.zero? ? nil : broker_info[0]
-      port = to_port_number(broker_info[port_position])
-      unless port
-        raise ArgumentError,
-              format('Invalid broker port number found in config: %s',
-                     broker_info[port_position])
-      end
+      port = broker_info[port_position]
       hosts = broker_info[(port_position + 1)..-1]
       [id, hosts, port]
     end
 
-    def to_port_number(text)
-      number = Integer(text)
-      number > 0 && number < 65_536 ? number : nil
+    def get_port_position_in_broker_info(broker_info, test_position)
+      DXLClient::Util.to_port_number(broker_info[test_position])
+      test_position
     rescue ArgumentError
-      nil
+      test_position + 1
     end
 
     def get_setting(section, setting, constructor_param = nil,

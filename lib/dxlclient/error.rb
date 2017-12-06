@@ -6,10 +6,14 @@ module DXLClient
     class IOError < DXLError
     end
 
+    class MalformedBrokerError < DXLError
+    end
+
     class NotConnectedError < IOError
     end
 
     class WaitTimeoutError < IOError
     end
+
   end
 end

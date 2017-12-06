@@ -238,14 +238,7 @@ module DXLClient
 
     def topics_for_mqtt_client(topics)
       raise ArgumentError, 'topics cannot be a Hash' if topics.is_a?(Hash)
-      if topics.respond_to?(:each)
-        [*topics]
-      elsif topics.is_a?(String)
-        [topics]
-      else
-        raise ArgumentError,
-              "Unsupported data type for topics: #{topics.name}"
-      end
+      [*topics]
     end
 
     def on_connect

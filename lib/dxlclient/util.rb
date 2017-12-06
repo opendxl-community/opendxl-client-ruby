@@ -8,6 +8,16 @@ module DXLClient
       "{#{SecureRandom.uuid}}"
     end
 
+    def self.to_port_number(text)
+      number = port_as_integer(text)
+      if number > 0 && number < 65_536
+        number
+      else
+        raise ArgumentError,
+              "Port number #{text} not in valid range (1-65535)"
+      end
+    end
+
     def self.current_thread_name(name)
       Thread.current.tap do |current_thread|
         if current_thread.respond_to?(:name)
@@ -26,5 +36,14 @@ module DXLClient
         "#{exception.message} (#{exception.class})"
       end
     end
+
+    def self.port_as_integer(text)
+      Integer(text)
+    rescue ArgumentError => e
+      raise ArgumentError,
+            "Error parsing port number: #{e.message}"
+    end
+
+    private_class_method :port_as_integer
   end
 end

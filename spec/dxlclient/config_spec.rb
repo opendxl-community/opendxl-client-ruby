@@ -1,4 +1,5 @@
 require 'dxlclient/config'
+require 'dxlclient/error'
 
 describe DXLClient::Config do
   context 'when built from a config file' do
@@ -63,6 +64,22 @@ broker3=10883;127.0.0.3
       expect(broker.hosts).to eql(['127.0.0.3'])
       expect(broker.id).to be_nil
       expect(broker.port).to eql(10_883)
+    end
+
+    it 'should raise a malformed broker error for a bad broker port number' do
+      filename = 'bad_broker_port.config'
+      config_file = '#
+[Certs]
+BrokerCertChain=mycertchain.crt
+CertFile=mycert.crt
+PrivateKey=mykey.key
+
+[Brokers]
+broker1=broker1;notaport;127.0.0.1
+'
+      allow(File).to receive(:read).with(filename).and_return(config_file)
+      expect{DXLClient::Config.create_dxl_config_from_file(filename)}
+        .to raise_error(DXLClient::Error::MalformedBrokerError)
     end
   end
 
