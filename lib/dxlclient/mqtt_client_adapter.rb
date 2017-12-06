@@ -94,19 +94,37 @@ module DXLClient
       @mqtt_client.port = value
     end
 
-    def subscribe(*topics)
+    def subscribe(topics)
       recast_exception('Failed to subscribe to topics') do
-        @mqtt_client.subscribe(topics)
+        invoke_method_once_per_topic(
+          ->(topic) { @mqtt_client.subscribe(topic) }, topics
+        )
       end
     end
 
-    def unsubscribe(*topics)
+    def unsubscribe(topics)
       recast_exception('Failed to unsubscribe from topics') do
-        @mqtt_client.unsubscribe(topics)
+        invoke_method_once_per_topic(
+          ->(topic) { @mqtt_client.unsubscribe(topic) }, topics
+        )
       end
     end
 
     private
+
+    # The underlying subscribe and unsubscribe methods in the MQTT client
+    # support combining multiple topics into a single MQTT request packet
+    # but the broker will drop the connection if the size of the packet is
+    # above some threshold. This method allows topics to be processed one at
+    # a time, which is less performant but avoids failures for a large
+    # number of topics.
+    def invoke_method_once_per_topic(proc, topics)
+      if topics.respond_to?(:each)
+        topics.each { |topic| proc.call(topic) }
+      else
+        proc.call(topics)
+      end
+    end
 
     def recast_exception(message_prefix = nil)
       yield
