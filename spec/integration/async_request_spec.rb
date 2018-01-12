@@ -10,6 +10,7 @@ DXLClient::Logger.root_logger.level = DXLClient::Logger::ERROR
 describe 'async requests', :integration do
   it 'should receive a response for every request made' do
     request_count = 100
+    expected_request_count = request_count * 2
     expected_response_count = request_count * 3
     max_wait = 60
     total_response_count = 0
@@ -64,10 +65,8 @@ describe 'async requests', :integration do
           all_responses_received_condition.wait(response_mutex, wait_remaining)
         end
 
+        expect(requests.keys.count).to equal(expected_request_count)
         expect(total_response_count).to eql(expected_response_count)
-        requests.values do |response_count_for_request|
-          expect(response_count_for_request).to eql(3)
-        end
       end
     end
   end
