@@ -6,9 +6,9 @@ Gem::Specification.new do |s|
   s.summary = 'OpenDXL Ruby client'
   s.files = Dir['lib/**/*.rb']
 
-  s.add_runtime_dependency 'iniparse'
+  s.add_runtime_dependency 'iniparse', '~> 1.4.4'
   s.add_runtime_dependency 'mqtt'
-  s.add_runtime_dependency 'msgpack'
+  s.add_runtime_dependency 'msgpack', '~> 1.2.2'
 
   s.add_development_dependency 'rspec'
   s.add_development_dependency 'rubocop'
