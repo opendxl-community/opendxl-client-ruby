@@ -7,7 +7,12 @@ services:
 
 before_install:
   - docker pull opendxl/opendxl-broker
-  - docker run -d -p 127.0.0.1:8883:8883 --volume "$PWD/dxlbroker-volume:/dxlbroker-volume" opendxl/opendxl-broker
+  - docker run -d -p 127.0.0.1:8883:8883 --name opendxl-broker opendxl/opendxl-broker
+  - nc -z 127.0.0.1 8883
+  - while [ $? -ne 0 ]; do sleep 1; nc -z 127.0.0.1 8883; done
+  - mkdir ./dxlbroker-volume
+  - docker cp opendxl-broker:/dxlbroker-volume/keystore ./dxlbroker-volume
+  - ls -l ./dxlbroker-volume/keystore
   - docker ps -a
   - cp spec/integration/client_config.cfg.travis spec/integration/client_config.cfg
 
