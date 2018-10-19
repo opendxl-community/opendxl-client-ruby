@@ -11,6 +11,40 @@ the
 messaging fabric for the purposes of sending/receiving events and
 invoking/providing services.
 
+## Tested Ruby Versions
+
+The code may work on all Ruby MRI (CRuby) 2.x versions but has only been
+tested with Ruby MRI (CRuby) versions 2.3.x and 2.4.x.
+
+The code is known to encounter problems with [JRuby](https://www.jruby.org) 9k
+(last tested with JRuby 9.2.0.0).
+
+* The client can intermittently hang on attempts to receive incoming DXL
+  messages.
+
+  This has been seen most frequently when a significant number of incoming and
+  outgoing DXL messages are in process. An issue has been raised for this to
+  the njh/ruby-mqtt project [here](https://github.com/njh/ruby-mqtt/pull/104).
+
+* Socket-level exceptions may be raised and not handled properly when
+  connections are closed while DXL messages are still in flight from another
+  thread.
+
+## Bugs / Limitations
+
+No releases (i.e., to [RubyGems](https://rubygems.org/)) have been done for
+this project yet. In addition to the issues seen when running under JRuby 9k,
+here is a list of known current limitations:
+
+* Certificate path settings in the dxlclient.config (BrokerCertChain, CertFile,
+  and PrivateKey) currently require a fully-qualified path.
+
+* No support exists yet for client configuration provisioning via a command
+  line tool, as can be done with the
+  [OpenDXL Python Client](https://opendxl.github.io/opendxl-client-python/pydoc/basiccliprovisioning.html).
+
+* No API-level docs have been written / produced yet.
+
 ## LICENSE
 
 Copyright 2018
