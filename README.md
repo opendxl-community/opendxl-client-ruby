@@ -39,11 +39,31 @@ here is a list of known current limitations:
 * Certificate path settings in the dxlclient.config (BrokerCertChain, CertFile,
   and PrivateKey) currently require a fully-qualified path.
 
+* When a service id is included in a request message, the request message is
+  inappropriately routed to request callbacks which match the request topic
+  but do not match the service id.
+
 * No support exists yet for client configuration provisioning via a command
   line tool, as can be done with the
   [OpenDXL Python Client](https://opendxl.github.io/opendxl-client-python/pydoc/basiccliprovisioning.html).
 
-* No API-level docs have been written / produced yet.
+* The [add_topics](https://opendxl.github.io/opendxl-client-python/pydoc/dxlclient.service.html#dxlclient.service.ServiceRegistrationInfo.add_topics)
+  method from the OpenDXL Python client has not been implemented yet.
+
+## Other To-Dos
+
+* Produce API-level (probably [YARD-based](https://yardoc.org/)) docs
+
+* Port some additional test suites over from the Python/JavaScript OpenDXL
+  test suites, including:
+
+  * Message serialization unit tests (e.g., binary/non-ASCII and
+    'other fields')
+
+  * Broker service registry tests
+
+* Add Rakefile and tasks for running tests, building docs, building packages
+  per the typical OpenDXL client packaging approach, etc.
 
 ## LICENSE
 
